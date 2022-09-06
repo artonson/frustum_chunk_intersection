@@ -59,10 +59,14 @@ class CameraView(Plottable, PathsLoadable):
                 CameraPose(self.extrinsics),
                 line_length=.1,
                 line_width=.01)
-
         elif self.plot_type == 'frustum':
-            CameraFrustumPlottable()
-
+            plottable = CameraFrustumPlottable(
+                camera_pose=CameraPose(self.extrinsics),
+                focal_length=[self.intrinsics[0, 0]],
+                image_size=np.array(self.rgb.shape[:2]),
+                principal_point=self.intrinsics[[0, 1], 2],
+                sensor_size=np.array(self.rgb.shape[:2]),
+                line_length=0.01, )
         else:
             raise ValueError(f'{self.plot_type}')
 
@@ -126,6 +130,18 @@ class ChunkVolume(Plottable, PathsLoadable):
 
         return plottable.plot(k3d_plot)
 
+    @property
+    def voxels_xyz(self) -> np.ndarray:
+        """Returns XYZ coordinates of voxel centers in world frame."""
+        m, n, p = self.sdf.shape
+        x_i, y_i, z_i = np.arange(m), np.arange(n), np.arange(p)
+        xx, yy, zz = np.meshgrid(x_i, y_i, z_i, indexing='ij')
+        indexes = np.stack((xx, yy, zz), axis=3)
+        mask = self.sdf < self.plot_sdf_thr
+        transform = np.linalg.inv(self.transform)
+        points = tt.transform_points(swap_xz(indexes[mask]), transform)
+        return points
+
 
 @dataclass
 class FullVolume(Plottable, PathsLoadable):
@@ -153,6 +169,17 @@ class FullVolume(Plottable, PathsLoadable):
         room[indexes[:, 0], indexes[:, 1], indexes[:, 2]] = sdf
         return cls(indexes, sdf, shape, room, transform, known, rgb)
 
+    @property
+    def voxels_xyz(self) -> np.ndarray:
+        """Returns XYZ coordinates of voxel centers in world frame."""
+        i, j, k = self.sparse_indexes[:, 0], self.sparse_indexes[:, 1], \
+                  self.sparse_indexes[:, 2]
+        mask = self.sparse_sdf < self.plot_sdf_thr
+        transform = np.linalg.inv(self.transform)
+        points = tt.transform_points(
+            swap_xz(self.sparse_indexes[mask]), transform)
+        return points
+
     def plot(self, k3d_plot):
         if self.plot_type == 'volume':
             plottable = VolumePlottable(
@@ -164,12 +191,12 @@ class FullVolume(Plottable, PathsLoadable):
         elif self.plot_type == 'points':
             i, j, k = self.sparse_indexes[:, 0], self.sparse_indexes[:, 1], \
                       self.sparse_indexes[:, 2]
-            colors = self.sparse_colors[i, j, k]
-            mask = self.sparse_sdf < .1
+            mask = self.sparse_sdf < self.plot_sdf_thr
             transform = np.linalg.inv(self.transform)
             voxel_size_in_mm = float(transform[0, 0])
             points = tt.transform_points(
                 swap_xz(self.sparse_indexes[mask]), transform)
+            colors = self.sparse_colors[i, j, k]
             point_colors = rgb_to_packed_colors(
                 colors[mask, 0], colors[mask, 1], colors[mask, 2])
             plottable = PointsPlottable(

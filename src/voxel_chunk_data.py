@@ -1,11 +1,12 @@
 import glob
 from collections import defaultdict
 import os
-from typing import Mapping
+from typing import Mapping, Tuple
 
 import numpy as np
+import trimesh.transformations as tt
 
-from src.frustum import CameraFrustum
+from src.camera_pose import CameraPose
 from src.objects import (
     ChunkVolume, CameraView, VoxelChunkData, FullVolume)
 
@@ -13,18 +14,24 @@ from src.objects import (
 def is_visible(
         chunk_volume: ChunkVolume,
         camera_view: CameraView,
-        mode: str = 'all',
+        fraction: float = 0.8,
+        frame_size: Tuple[int, int] = None,
 ):
     """Compute per-voxel visibility mask, then reduce."""
-    points = ...  # generate points based on chunk_volume
-    frustum = CameraFrustum(camera_view.extrinsics, camera_view.intrinsics)
-    mask = frustum.is_visible(points)
-    if mode == 'all':
-        return np.sum(mask) == len(points)
-    elif mode == 'any':
-        return np.sum(mask) > 0
+    points = chunk_volume.voxels_xyz  # generate points based on chunk_volume
+    projected = tt.transform_points(
+        CameraPose(camera_view.extrinsics).world_to_camera(points),
+        camera_view.intrinsics)
+    if None is not frame_size:
+        width, height = frame_size
     else:
-        raise ValueError()
+        width = 2 * camera_view.intrinsics[0, 2]
+        height = 2 * camera_view.intrinsics[1, 2]
+    mask = (projected[:, 0] > 0) & (projected[:, 0] < width) \
+           & (projected[:, 1] > 0) & (projected[:, 1] < height) \
+           & (projected[:, 2] > 0)
+    num_inside_points = np.sum(mask)
+    return num_inside_points >= fraction * len(points)
 
 
 def split_chunkvolume_filename(s):
