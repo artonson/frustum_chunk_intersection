@@ -35,6 +35,7 @@ class CameraView(Plottable, PathsLoadable):
     depth: np.ndarray
 
     plot_type = 'axes'  # or 'frustum'
+    line_length = 0.01
 
     @classmethod
     def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
@@ -57,7 +58,7 @@ class CameraView(Plottable, PathsLoadable):
         if self.plot_type == 'axes':
             plottable = CameraPlottable(
                 CameraPose(self.extrinsics),
-                line_length=.1,
+                line_length=self.line_length,
                 line_width=.01)
         elif self.plot_type == 'frustum':
             plottable = CameraFrustumPlottable(
@@ -66,7 +67,7 @@ class CameraView(Plottable, PathsLoadable):
                 image_size=np.array(self.rgb.shape[:2]),
                 principal_point=self.intrinsics[[0, 1], 2],
                 sensor_size=np.array(self.rgb.shape[:2]),
-                line_length=0.01, )
+                line_length=self.line_length, )
         else:
             raise ValueError(f'{self.plot_type}')
 

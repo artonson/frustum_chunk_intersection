@@ -1,7 +1,7 @@
 import glob
 from collections import defaultdict
 import os
-from typing import Mapping, Tuple
+from typing import Mapping, Tuple, List
 
 import numpy as np
 import trimesh.transformations as tt
@@ -59,12 +59,15 @@ class VoxelDataPaths:
             scene_id: str,
             room_id: str,
             chunk_id: str = '*',
+            type_id: str = 'cmp',
             load: bool = False,
+            fraction: float = 0.8,
     ):
         self.data_root = data_root
         self.scene_id = scene_id
         self.room_id = room_id
-        self.type = 'cmp'
+        self.type_id = type_id
+        self.fraction = fraction
 
         if chunk_id == '*':
             wildcard = self.get_chunk_filename('*')
@@ -97,11 +100,11 @@ class VoxelDataPaths:
 
     def get_cameras_dataframe_filename(self, chunk_id):
         df_filename = os.path.join(self.data_root, self.DATA_FRAMES_DIR,
-            f'{self.scene_id}_room{self.room_id}__{self.type}__{chunk_id}.txt')
+            f'{self.scene_id}_room{self.room_id}__{self.type_id}__{chunk_id}.txt')
         return df_filename
 
     def get_chunk_filename(self, chunk_id):
-        chunk_filename = f'{self.scene_id}_room{self.room_id}__{self.type}__{chunk_id}.sdf'
+        chunk_filename = f'{self.scene_id}_room{self.room_id}__{self.type_id}__{chunk_id}.sdf'
         chunk_filename = os.path.join(
             self.data_root, self.CHUNK_VOLUMES_DIR, chunk_filename)
         return chunk_filename
@@ -143,11 +146,11 @@ class VoxelDataPaths:
     def load(self):
         self._data = self._load()
 
-    def compute_voxel_visibility(self) -> Mapping[int, int]:
+    def compute_voxel_visibility(self) -> Mapping[int, List[int]]:
         visibility = defaultdict(list)
         for chunk_volume in self._data.chunk_volumes:
-            for camera_view in self._data.camera_views:
-                if is_visible(chunk_volume, camera_view):
+            for camera_view in self._data.camera_views.values():
+                if is_visible(chunk_volume, camera_view, fraction=self.fraction):
                     visibility[chunk_volume.id].append(camera_view.id)
         return visibility
 
