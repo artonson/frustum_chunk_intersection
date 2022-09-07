@@ -1,0 +1,13 @@
+name: py38_dev
+channels:
+  - conda-forge
+dependencies:
+  - python=3.8
+  - pip>=20.3
+  - numpy>=1.23
+  - scipy>=1.9
+  - k3d-jupyter==2.14.5
+  - trimesh>=3.14
+  - Pillow
+  -
+
