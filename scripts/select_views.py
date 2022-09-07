@@ -32,17 +32,24 @@ def main(options):
 
     if options.verbose:
         print('Computing chunk-voxel visibility')
-    voxel_visibility_map = paths.compute_voxel_visibility()
+    if options.output_fraction:
+        visibility_map = paths.compute_fraction_voxels_in_view()
+    else:
+        visibility_map = paths.compute_voxel_visibility()
 
     if options.verbose:
         print('Saving outputs')
     os.makedirs(options.output_dir, exist_ok=True)
-    for chunk_id, camera_ids in voxel_visibility_map.items():
+    for chunk_id, camera_ids in visibility_map.items():
         output_filename = os.path.join(
             options.output_dir,
             f'{options.scene_id}_room{options.room_id}__{options.type_id}__{chunk_id}.txt')
         with open(output_filename, 'w') as f:
-            f.write('\n'.join([str(id) for id in camera_ids]))
+            if options.output_fraction:
+                f.write('\n'.join([
+                    f'{id} {value:.4f}' for id, value in camera_ids.items()]))
+            else:
+                f.write('\n'.join([str(id) for id in camera_ids]))
 
 
 def parse_args():
@@ -103,6 +110,14 @@ def parse_args():
         type=PathType(exists=None, type='dir', dash_ok=False),
         required=True,
         help='path to root of the output.')
+    parser.add_argument(
+        '-f', '--output-fraction',
+        dest='output_fraction',
+        action='store_true',
+        default=False,
+        required=False,
+        help='if set, outputs the fraction of voxels inside '
+             'each camera view.')
 
     parser.add_argument(
         '-v', '--verbose',

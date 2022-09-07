@@ -11,13 +11,12 @@ from src.objects import (
     ChunkVolume, CameraView, VoxelChunkData, FullVolume)
 
 
-def is_visible(
+def compute_fraction_voxels_in_view(
         chunk_volume: ChunkVolume,
         camera_view: CameraView,
-        fraction: float = 0.8,
         frame_size: Tuple[int, int] = None,
 ):
-    """Compute per-voxel visibility mask, then reduce."""
+    """Compute fraction of points visible inside the view."""
     points = chunk_volume.voxels_xyz  # generate points based on chunk_volume
     projected = tt.transform_points(
         CameraPose(camera_view.extrinsics).world_to_camera(points),
@@ -31,7 +30,20 @@ def is_visible(
            & (projected[:, 1] > 0) & (projected[:, 1] < height) \
            & (projected[:, 2] > 0)
     num_inside_points = np.sum(mask)
-    return num_inside_points >= fraction * len(points)
+    return num_inside_points / len(points)
+
+
+def is_visible(
+        chunk_volume: ChunkVolume,
+        camera_view: CameraView,
+        fraction: float = 0.8,
+        frame_size: Tuple[int, int] = None,
+):
+    fraction_inside = compute_fraction_voxels_in_view(
+        chunk_volume,
+        camera_view,
+        frame_size,)
+    return fraction_inside >= fraction
 
 
 def split_chunkvolume_filename(s):
@@ -152,6 +164,15 @@ class VoxelDataPaths:
             for camera_view in self._data.camera_views.values():
                 if is_visible(chunk_volume, camera_view, fraction=self.fraction):
                     visibility[chunk_volume.id].append(camera_view.id)
+        return visibility
+
+    def compute_fraction_voxels_in_view(self) -> Mapping[int, Mapping[int, float]]:
+        visibility = defaultdict(lambda: defaultdict(float))
+        for chunk_volume in self._data.chunk_volumes:
+            for camera_view in self._data.camera_views.values():
+                fraction = compute_fraction_voxels_in_view(
+                    chunk_volume, camera_view)
+                visibility[chunk_volume.id][camera_view.id] = fraction
         return visibility
 
     @property
