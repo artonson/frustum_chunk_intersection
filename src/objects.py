@@ -211,15 +211,15 @@ class FullVolume(Plottable, PathsLoadable):
         return plottable.plot(k3d_plot)
 
 
-CameraByChunk = Mapping[int, np.ndarray]
+CameraByChunk = Mapping[str, np.ndarray]
 
 
 @dataclass
 class VoxelChunkData(Plottable, PathsLoadable):
-    camera_ids: CameraByChunk
-    camera_views: Mapping[int, CameraView]
-    chunk_volumes: List[ChunkVolume]
-    full_volumes: FullVolume
+    camera_ids: CameraByChunk = None
+    camera_views: Mapping[int, CameraView] = None
+    chunk_volumes: List[ChunkVolume] = None
+    full_volumes: FullVolume = None
 
     @classmethod
     def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):

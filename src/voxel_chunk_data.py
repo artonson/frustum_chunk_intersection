@@ -1,10 +1,12 @@
 import glob
+import sys
 from collections import defaultdict
 import os
 from typing import Mapping, Tuple, List
 
 import numpy as np
 import trimesh.transformations as tt
+from tqdm import tqdm
 
 from src.camera_pose import CameraPose
 from src.objects import (
@@ -74,6 +76,7 @@ class VoxelDataPaths:
             type_id: str = 'cmp',
             load: bool = False,
             fraction: float = 0.8,
+            verbose: bool = False,
     ):
         self.data_root = data_root
         self.scene_id = scene_id
@@ -88,6 +91,7 @@ class VoxelDataPaths:
         else:
             self.chunk_ids = [chunk_id]
 
+        self.verbose = verbose
         self._data = None
         if load:
             self._data = self._load()
@@ -130,24 +134,63 @@ class VoxelDataPaths:
 
     def _load(self) -> VoxelChunkData:
         # camera IDs
-        camera_ids_by_chunk = {}
-        for chunk_id in self.chunk_ids:
-            ids = np.loadtxt(
-                self.get_cameras_dataframe_filename(chunk_id), dtype=np.int_)
-            camera_ids_by_chunk[chunk_id] = ids[ids != -1]
-        camera_ids = np.unique(np.concatenate(list(camera_ids_by_chunk.values())))
+        if self.verbose:
+            print('Loading camera-chunk correspondences')
+        camera_ids = None
+        camera_ids_by_chunk = None
+        if os.path.exists(os.path.join(self.data_root, self.DATA_FRAMES_DIR)):
+            try:
+                camera_ids_by_chunk = {}
+                for chunk_id in self.chunk_ids:
+                    ids = np.loadtxt(
+                        self.get_cameras_dataframe_filename(chunk_id), dtype=np.int_)
+                    camera_ids_by_chunk[chunk_id] = ids[ids != -1]
+                camera_ids = np.unique(np.concatenate(list(camera_ids_by_chunk.values())))
+            except Exception as e:
+                print(f'Cannot read voxel-chunk correspondences: {str(e)}',
+                      file=sys.stderr)
+        if None is camera_ids:
+            # load all cameras
+            wildcard = self.get_calib_filename('*')
+            filenames = glob.glob(wildcard)
+            camera_ids = [os.path.splitext(os.path.basename(filename))[0]
+                          for filename in filenames]
 
         # camera views (ext, int, rgb, d)
-        camera_views = {camera_id: CameraView.from_paths(self, camera_id)
-                        for camera_id in camera_ids}
+        if self.verbose:
+            camera_ids = tqdm(camera_ids)
+            print('Loading camera views')
+        camera_views = None
+        if os.path.exists(os.path.join(self.data_root, self.IMAGES_DIR)):
+            try:
+                camera_views = {
+                    camera_id: CameraView.from_paths(self, camera_id)
+                    for camera_id in camera_ids}
+            except Exception as e:
+                print(f'Cannot read camera views: {str(e)}', file=sys.stderr)
 
         # chunks
-        chunk_volumes = [
-            ChunkVolume.from_paths(self, chunk_id)
-            for chunk_id in self.chunk_ids]
+        if self.verbose:
+            print('Loading chunks')
+            self.chunk_ids = tqdm(self.chunk_ids)
+        chunk_volumes = None
+        if os.path.exists(os.path.join(self.data_root, self.CHUNK_VOLUMES_DIR)):
+            try:
+                chunk_volumes = [
+                    ChunkVolume.from_paths(self, chunk_id)
+                    for chunk_id in self.chunk_ids]
+            except Exception as e:
+                print(f'Cannot read chunk volumes: {str(e)}', file=sys.stderr)
 
         # the SDF of the entire room (might be memory intensive)
-        full_volume = FullVolume.from_paths(self)
+        if self.verbose:
+            print('Loading full volumes')
+        full_volume = None
+        if os.path.exists(os.path.join(self.data_root, self.CHUNK_VOLUMES_DIR)):
+            try:
+                full_volume = FullVolume.from_paths(self)
+            except Exception as e:
+                print(f'Cannot read full volumes: {str(e)}', file=sys.stderr)
 
         return VoxelChunkData(
             camera_ids=camera_ids_by_chunk,
@@ -161,7 +204,10 @@ class VoxelDataPaths:
     def compute_voxel_visibility(self) -> Mapping[int, List[int]]:
         visibility = defaultdict(list)
         for chunk_volume in self._data.chunk_volumes:
-            for camera_view in self._data.camera_views.values():
+            iterable = self._data.camera_views.values()
+            if self.verbose:
+                iterable = tqdm(iterable)
+            for camera_view in iterable:
                 if is_visible(chunk_volume, camera_view, fraction=self.fraction):
                     visibility[chunk_volume.id].append(camera_view.id)
         return visibility
@@ -169,7 +215,10 @@ class VoxelDataPaths:
     def compute_fraction_voxels_in_view(self) -> Mapping[int, Mapping[int, float]]:
         visibility = defaultdict(lambda: defaultdict(float))
         for chunk_volume in self._data.chunk_volumes:
-            for camera_view in self._data.camera_views.values():
+            iterable = self._data.camera_views.values()
+            if self.verbose:
+                iterable = tqdm(iterable)
+            for camera_view in iterable:
                 fraction = compute_fraction_voxels_in_view(
                     chunk_volume, camera_view)
                 visibility[chunk_volume.id][camera_view.id] = fraction

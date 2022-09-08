@@ -22,7 +22,8 @@ def main(options):
         room_id=options.room_id,
         type_id=options.type_id,
         chunk_id=options.chunk_id,
-        fraction=options.overlap_fraction)
+        fraction=options.overlap_fraction,
+        verbose=options.verbose)
 
     paths.load()
 
