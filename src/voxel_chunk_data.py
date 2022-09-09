@@ -100,29 +100,39 @@ class VoxelDataPaths:
         calib_filename = os.path.join(
             self.data_root, self.IMAGES_DIR, self.scene_id,
             self.CALIB_DIR, f'{camera_id}.txt')
+        if self.verbose:
+            print(calib_filename)
         return calib_filename
 
     def get_rgb_filename(self, camera_id):
         rgb_filename = os.path.join(
             self.data_root, self.IMAGES_DIR, self.scene_id,
             self.RGB_DIR, f'{camera_id}.jpg')
+        if self.verbose:
+            print(rgb_filename)
         return rgb_filename
 
     def get_depth_filename(self, camera_id):
         depth_filename = os.path.join(
             self.data_root, self.IMAGES_DIR, self.scene_id,
             self.DEPTH_DIR, f'{camera_id}.png')
+        if self.verbose:
+            print(depth_filename)
         return depth_filename
 
     def get_cameras_dataframe_filename(self, chunk_id):
         df_filename = os.path.join(self.data_root, self.DATA_FRAMES_DIR,
             f'{self.scene_id}_room{self.room_id}__{self.type_id}__{chunk_id}.txt')
+        if self.verbose:
+            print(df_filename)
         return df_filename
 
     def get_chunk_filename(self, chunk_id):
         chunk_filename = f'{self.scene_id}_room{self.room_id}__{self.type_id}__{chunk_id}.sdf'
         chunk_filename = os.path.join(
             self.data_root, self.CHUNK_VOLUMES_DIR, chunk_filename)
+        if self.verbose:
+            print(chunk_filename)
         return chunk_filename
 
     def get_full_filenames(self):
@@ -130,6 +140,8 @@ class VoxelDataPaths:
             f'{self.scene_id}_room{self.room_id}__{0}__.sdf')
         rgb_filename = os.path.join(self.data_root, self.FULL_VOLUMES_DIR,
             f'{self.scene_id}_room{self.room_id}__{0}__.colors')
+        if self.verbose:
+            print(sdf_filename) ; print((rgb_filename))
         return sdf_filename, rgb_filename
 
     def _load(self) -> VoxelChunkData:
