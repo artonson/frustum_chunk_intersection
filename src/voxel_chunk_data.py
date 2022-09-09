@@ -198,7 +198,7 @@ class VoxelDataPaths:
         if self.verbose:
             print('Loading full volumes')
         full_volume = None
-        if os.path.exists(os.path.join(self.data_root, self.CHUNK_VOLUMES_DIR)):
+        if os.path.exists(os.path.join(self.data_root, self.FULL_VOLUMES_DIR)):
             try:
                 full_volume = FullVolume.from_paths(self)
             except Exception as e:
