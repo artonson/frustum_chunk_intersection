@@ -83,6 +83,7 @@ class VoxelDataPaths:
         self.room_id = room_id
         self.type_id = type_id
         self.fraction = fraction
+        self.verbose = verbose
 
         if chunk_id == '*':
             wildcard = self.get_chunk_filename('*')
@@ -91,7 +92,6 @@ class VoxelDataPaths:
         else:
             self.chunk_ids = [chunk_id]
 
-        self.verbose = verbose
         self._data = None
         if load:
             self._data = self._load()
