@@ -92,7 +92,7 @@ class VoxelDataPaths:
         else:
             self.chunk_ids = [chunk_id]
 
-        self._data = None
+        self._data = VoxelChunkData()
         if load:
             self._data = self._load()
 
@@ -161,6 +161,8 @@ class VoxelDataPaths:
             except Exception as e:
                 print(f'Cannot read voxel-chunk correspondences: {str(e)}',
                       file=sys.stderr)
+                self._data.camera_ids = camera_ids_by_chunk
+
         if None is camera_ids:
             # load all cameras
             wildcard = self.get_calib_filename('*')
@@ -180,6 +182,19 @@ class VoxelDataPaths:
                     for camera_id in camera_ids}
             except Exception as e:
                 print(f'Cannot read camera views: {str(e)}', file=sys.stderr)
+            self._data.camera_views = camera_views
+
+        # the SDF of the entire room (might be memory intensive)
+        # need to read this first, then read chunks for 128^3
+        if self.verbose:
+            print('Loading full volumes')
+        full_volume = None
+        if os.path.exists(os.path.join(self.data_root, self.FULL_VOLUMES_DIR)):
+            try:
+                full_volume = FullVolume.from_paths(self)
+            except Exception as e:
+                print(f'Cannot read full volumes: {str(e)}', file=sys.stderr)
+            self._data.full_volume = full_volume
 
         # chunks
         if self.verbose:
@@ -193,22 +208,9 @@ class VoxelDataPaths:
                     for chunk_id in self.chunk_ids]
             except Exception as e:
                 print(f'Cannot read chunk volumes: {str(e)}', file=sys.stderr)
+            self._data.chunk_volumes = chunk_volumes
 
-        # the SDF of the entire room (might be memory intensive)
-        if self.verbose:
-            print('Loading full volumes')
-        full_volume = None
-        if os.path.exists(os.path.join(self.data_root, self.FULL_VOLUMES_DIR)):
-            try:
-                full_volume = FullVolume.from_paths(self)
-            except Exception as e:
-                print(f'Cannot read full volumes: {str(e)}', file=sys.stderr)
-
-        return VoxelChunkData(
-            camera_ids=camera_ids_by_chunk,
-            camera_views=camera_views,
-            chunk_volumes=chunk_volumes,
-            full_volumes=full_volume)
+        return self._data
 
     def load(self):
         self._data = self._load()
@@ -238,7 +240,7 @@ class VoxelDataPaths:
 
     @property
     def full_volume(self):
-        return self._data.full_volumes
+        return self._data.full_volume
 
     @property
     def camera_views(self):

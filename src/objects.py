@@ -82,6 +82,7 @@ class ChunkVolume(Plottable, PathsLoadable):
     transform: np.ndarray
     known: np.ndarray
     colors: np.ndarray
+    version: str = '2'  # 1 for older 64 chunks, 2 for newer 128 chunks
 
     plot_type: str = 'volume'  # or 'points' -- then u have color
     plot_sdf_thr: float = 0.01
@@ -91,15 +92,33 @@ class ChunkVolume(Plottable, PathsLoadable):
         chunk_id = args[0]
 
         chunk_filename = paths.get_chunk_filename(chunk_id)
-        sdf, sdf_transform, known, colors = load_sdf(
+        if cls.version == '1':
+            load_colors = True
+        elif cls.version == '2':
+            load_colors = False
+        else:
+            raise ValueError(
+                f'Version {cls.version} of {cls.__name__} is unknown')
+
+        sdf, chunk_transform, known, colors = load_sdf(
             file=chunk_filename,
             load_sparse=False,
             load_known=False,
-            load_colors=True,
+            load_colors=load_colors,
             color_file=None)
         sdf[sdf == -np.inf] = np.inf
 
-        return cls(chunk_id, chunk_filename, sdf, sdf_transform, known, colors)
+        if cls.version == '2':
+            assert None is not paths.full_volume, \
+                f'you must first load full volume in version {cls.version}'
+            scene_transform = paths.full_volume.transform
+            scene_translation = scene_transform[:3, 3]
+            chunk_translation = chunk_transform[:3, 3]
+            relative_translation = chunk_translation - scene_translation
+            corrected_chunk_origin = scene_translation - relative_translation
+            chunk_transform[:3, 3] = corrected_chunk_origin
+
+        return cls(chunk_id, chunk_filename, sdf,  chunk_transform, known, colors)
 
     def plot(self, k3d_plot):
         if self.plot_type == 'volume':
@@ -110,7 +129,6 @@ class ChunkVolume(Plottable, PathsLoadable):
                 model_matrix=self.transform,)
 
         elif self.plot_type == 'points':
-            colors = self.colors
             m, n, p = self.sdf.shape
             x_i, y_i, z_i = np.arange(m), np.arange(n), np.arange(p)
             xx, yy, zz = np.meshgrid(x_i, y_i, z_i, indexing='ij')
@@ -119,12 +137,14 @@ class ChunkVolume(Plottable, PathsLoadable):
             transform = np.linalg.inv(self.transform)
             voxel_size_in_mm = float(transform[0, 0])
             points = tt.transform_points(swap_xz(indexes[mask]), transform)
-            point_colors = rgb_to_packed_colors(
-                colors[mask, 0], colors[mask, 1], colors[mask, 2])
-            plottable = PointsPlottable(
-                points=points,
-                point_colors=point_colors,
-                point_size=voxel_size_in_mm,)
+            args = dict(points=points, point_size=voxel_size_in_mm)
+            if None is not self.colors:
+                point_colors = rgb_to_packed_colors(
+                    self.colors[mask, 0],
+                    self.colors[mask, 1],
+                    self.colors[mask, 2])
+                args['point_colors'] = point_colors
+            plottable = PointsPlottable(**args)
 
         else:
             raise ValueError(f'{self.plot_type}')
@@ -219,7 +239,7 @@ class VoxelChunkData(Plottable, PathsLoadable):
     camera_ids: CameraByChunk = None
     camera_views: Mapping[int, CameraView] = None
     chunk_volumes: List[ChunkVolume] = None
-    full_volumes: FullVolume = None
+    full_volume: FullVolume = None
 
     @classmethod
     def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
@@ -230,7 +250,7 @@ class VoxelChunkData(Plottable, PathsLoadable):
             view.plot(k3d_plot)
         for volume in self.chunk_volumes:
             volume.plot(k3d_plot)
-        self.full_volumes.plot(k3d_plot)
+        self.full_volume.plot(k3d_plot)
 
 
 __all__ = [
