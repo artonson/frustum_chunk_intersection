@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #SBATCH --job-name=select-views
-#SBATCH --output=/trinity/home/a.artemov/tmp/sharpf-stats/%A.out
-#SBATCH --error=/trinity/home/a.artemov/tmp/sharpf-stats/%A.err
-#SBATCH --array=1-1
+#SBATCH --output=%A.out
+#SBATCH --error=%A.err
+#SBATCH --array=1-2
 #SBATCH --time=00:10:00
 #SBATCH --partition=submit
 #SBATCH --cpus-per-task=1
@@ -20,6 +20,7 @@ Usage: $0 -d data_dir [-v] <INPUT_FILE
 usage() { echo "$__usage" >&2; }
 
 # Get all the required options and set the necessary variables
+set -x
 VERBOSE=false
 while getopts "vd:i:" opt
 do
@@ -44,8 +45,10 @@ while IFS=' ' read -r scene room type; do
     fi
 done <"${INPUT_FILENAME:-/dev/stdin}"
 
-conda activate frustum_chunk_intersection-3.8.6
+# conda init bash
+source /rhome/aartemov/miniconda3/bin/activate /rhome/aartemov/miniconda3/envs/py38_dev
 
+REPO=/rhome/aartemov/repos/frustum_chunk_intersection
 SCRIPT="${REPO}/scripts/select_views.py"
 
 $SCRIPT \
