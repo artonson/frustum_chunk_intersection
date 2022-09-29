@@ -47,10 +47,16 @@ class CameraView(Plottable, PathsLoadable):
         extrinsics, intrinsics = camera_params[:4], camera_params[4:]
 
         rgb_filename = paths.get_rgb_filename(camera_id)
-        rgb_array = np.asarray(PilImage.open(rgb_filename))
+        try:
+            rgb_array = np.asarray(PilImage.open(rgb_filename))
+        except FileNotFoundError:
+            rgb_array = None
 
         depth_filename = paths.get_depth_filename(camera_id)
-        depth_array = np.asarray(PilImage.open(depth_filename), dtype=np.float_)
+        try:
+            depth_array = np.asarray(PilImage.open(depth_filename), dtype=np.float_)
+        except FileNotFoundError:
+            depth_array = None
 
         return cls(camera_id, rgb_filename, depth_filename,
                    extrinsics, intrinsics, rgb_array, depth_array)
