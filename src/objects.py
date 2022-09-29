@@ -36,6 +36,7 @@ class CameraView(Plottable, PathsLoadable):
 
     plot_type = 'axes'  # or 'frustum'
     line_length = 0.01
+    opacity: float = 1.0
 
     @classmethod
     def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
@@ -59,7 +60,8 @@ class CameraView(Plottable, PathsLoadable):
             plottable = CameraPlottable(
                 CameraPose(self.extrinsics),
                 line_length=self.line_length,
-                line_width=.01)
+                line_width=.01,
+                name=str(self.id))
         elif self.plot_type == 'frustum':
             plottable = CameraFrustumPlottable(
                 camera_pose=CameraPose(self.extrinsics),
@@ -67,7 +69,9 @@ class CameraView(Plottable, PathsLoadable):
                 image_size=np.array(self.rgb.shape[:2]),
                 principal_point=self.intrinsics[[0, 1], 2],
                 sensor_size=np.array(self.rgb.shape[:2]),
-                line_length=self.line_length, )
+                line_length=self.line_length, 
+                opacity=self.opacity,
+                name=str(self.id))
         else:
             raise ValueError(f'{self.plot_type}')
 
@@ -86,6 +90,7 @@ class ChunkVolume(Plottable, PathsLoadable):
 
     plot_type: str = 'volume'  # or 'points' -- then u have color
     plot_sdf_thr: float = 0.01
+    plot_colors: bool = True
 
     @classmethod
     def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
@@ -129,21 +134,18 @@ class ChunkVolume(Plottable, PathsLoadable):
                 model_matrix=self.transform,)
 
         elif self.plot_type == 'points':
-            m, n, p = self.sdf.shape
-            x_i, y_i, z_i = np.arange(m), np.arange(n), np.arange(p)
-            xx, yy, zz = np.meshgrid(x_i, y_i, z_i, indexing='ij')
-            indexes = np.stack((xx, yy, zz), axis=3)
-            mask = self.sdf < self.plot_sdf_thr
-            transform = np.linalg.inv(self.transform)
+            points, mask, transform = self._get_voxels_points_mask()
             voxel_size_in_mm = float(transform[0, 0])
-            points = tt.transform_points(swap_xz(indexes[mask]), transform)
             args = dict(points=points, point_size=voxel_size_in_mm)
-            if None is not self.colors:
-                point_colors = rgb_to_packed_colors(
-                    self.colors[mask, 0],
-                    self.colors[mask, 1],
-                    self.colors[mask, 2])
-                args['point_colors'] = point_colors
+            if self.plot_colors:
+                if None is not self.colors:
+                    point_colors = rgb_to_packed_colors(
+                        self.colors[mask, 0],
+                        self.colors[mask, 1],
+                        self.colors[mask, 2])
+                    args['point_colors'] = point_colors
+                else:
+                    args['attrs'] = np.abs(self.sdf[mask].ravel())
             plottable = PointsPlottable(**args)
 
         else:
@@ -151,16 +153,20 @@ class ChunkVolume(Plottable, PathsLoadable):
 
         return plottable.plot(k3d_plot)
 
-    @property
-    def voxels_xyz(self) -> np.ndarray:
-        """Returns XYZ coordinates of voxel centers in world frame."""
+    def _get_voxels_points_mask(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         m, n, p = self.sdf.shape
         x_i, y_i, z_i = np.arange(m), np.arange(n), np.arange(p)
         xx, yy, zz = np.meshgrid(x_i, y_i, z_i, indexing='ij')
         indexes = np.stack((xx, yy, zz), axis=3)
-        mask = self.sdf < self.plot_sdf_thr
+        mask = np.abs(self.sdf) < self.plot_sdf_thr
         transform = np.linalg.inv(self.transform)
         points = tt.transform_points(swap_xz(indexes[mask]), transform)
+        return points, mask, transform
+
+    @property
+    def voxels_xyz(self) -> np.ndarray:
+        """Returns XYZ coordinates of voxel centers in world frame."""
+        points, mask, transform = self._get_voxels_points_mask()
         return points
 
 
@@ -176,6 +182,7 @@ class FullVolume(Plottable, PathsLoadable):
 
     plot_type: str = 'volume'  # or 'points' -- then u have color
     plot_sdf_thr: float = 0.01
+    plot_colors: bool = True
 
     @classmethod
     def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
@@ -190,15 +197,17 @@ class FullVolume(Plottable, PathsLoadable):
         room[indexes[:, 0], indexes[:, 1], indexes[:, 2]] = sdf
         return cls(indexes, sdf, shape, room, transform, known, rgb)
 
-    @property
-    def voxels_xyz(self) -> np.ndarray:
-        """Returns XYZ coordinates of voxel centers in world frame."""
-        i, j, k = self.sparse_indexes[:, 0], self.sparse_indexes[:, 1], \
-                  self.sparse_indexes[:, 2]
-        mask = self.sparse_sdf < self.plot_sdf_thr
+    def _get_voxels_points_mask(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        mask = np.abs(self.sparse_sdf) < self.plot_sdf_thr
         transform = np.linalg.inv(self.transform)
         points = tt.transform_points(
             swap_xz(self.sparse_indexes[mask]), transform)
+        return points, mask, transform
+
+    @property
+    def voxels_xyz(self) -> np.ndarray:
+        """Returns XYZ coordinates of voxel centers in world frame."""
+        points, mask, transform = self._get_voxels_points_mask()
         return points
 
     def plot(self, k3d_plot):
@@ -210,20 +219,22 @@ class FullVolume(Plottable, PathsLoadable):
                 model_matrix=self.transform,)
 
         elif self.plot_type == 'points':
-            i, j, k = self.sparse_indexes[:, 0], self.sparse_indexes[:, 1], \
-                      self.sparse_indexes[:, 2]
-            mask = self.sparse_sdf < self.plot_sdf_thr
-            transform = np.linalg.inv(self.transform)
+            points, mask, transform = self._get_voxels_points_mask()
             voxel_size_in_mm = float(transform[0, 0])
-            points = tt.transform_points(
-                swap_xz(self.sparse_indexes[mask]), transform)
-            colors = self.sparse_colors[i, j, k]
-            point_colors = rgb_to_packed_colors(
-                colors[mask, 0], colors[mask, 1], colors[mask, 2])
-            plottable = PointsPlottable(
-                points=points,
-                point_colors=point_colors,
-                point_size=voxel_size_in_mm,)
+            args = dict(points=points, point_size=voxel_size_in_mm)
+            if self.plot_colors:
+                if None is not self.sparse_colors:
+                    i, j, k = self.sparse_indexes[:, 0], \
+                        self.sparse_indexes[:, 1], \
+                        self.sparse_indexes[:, 2]
+                    colors = self.sparse_colors[i, j, k]
+                    point_colors = rgb_to_packed_colors(
+                        colors[mask, 0], colors[mask, 1], colors[mask, 2])
+                    args['point_colors'] = point_colors
+            else:
+                args['attrs'] = np.abs(self.sparse_sdf[mask].ravel())
+
+            plottable = PointsPlottable(**args)
 
         else:
             raise ValueError(f'{self.plot_type}')

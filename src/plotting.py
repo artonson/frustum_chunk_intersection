@@ -183,6 +183,7 @@ class CameraPlottable(Plottable):
     x_color = 0xff0000
     y_color = 0x00ff00
     z_color = 0x0000ff
+    name: str = None
 
     def plot(self, k3d_plot):
         camera_center = np.array([
@@ -202,7 +203,8 @@ class CameraPlottable(Plottable):
             colors=[
                 self.x_color, self.x_color,
                 self.y_color, self.y_color,
-                self.z_color, self.z_color], )
+                self.z_color, self.z_color], 
+            name=self.name)
         k3d_plot += vectors
 
 
@@ -217,6 +219,7 @@ class CameraFrustumPlottable(Plottable):
     face_color: int = 0xbbbbbb
     wireframe: bool = False
     opacity: float = 1.0
+    name: str = None
 
     def plot(self, k3d_plot):
         # compute coordinates of image corners in camera
@@ -255,7 +258,8 @@ class CameraFrustumPlottable(Plottable):
             indices=faces,
             color=self.face_color,
             wireframe=self.wireframe,
-            opacity=self.opacity)
+            opacity=self.opacity,
+            name=self.name)
 
         k3d_plot += k3d.mesh(**mesh_args)
 
