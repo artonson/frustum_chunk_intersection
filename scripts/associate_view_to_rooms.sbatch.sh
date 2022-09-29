@@ -1,14 +1,15 @@
 #!/bin/bash
 
 #SBATCH --job-name=associate-views
-#SBATCH --output=%A.out
-#SBATCH --error=%A.err
-#SBATCH --array=1-2
-#SBATCH --time=00:10:00
+#SBATCH --output=associate-views-logs/%A_%a.out
+#SBATCH --error=associate-views-logs/%A_%a.err
+#SBATCH --array=1-1
+#SBATCH --time=00:30:00
 #SBATCH --partition=submit
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=1
-#SBATCH --mem-per-cpu=2g
+#SBATCH --mem-per-cpu=4g
+#SBATCH --oversubscribe
 
 __usage="
 Usage: $0 -d data_dir [-v] <INPUT_FILE
@@ -38,8 +39,8 @@ if [[ "${VERBOSE}" = true ]]; then
 fi
 
 count=0
-while IFS=' ' read -r scene room type; do
-    (( count++ ))
+while IFS=' ' read -r scene room ; do
+    (( count+=1 ))
     if (( count == SLURM_ARRAY_TASK_ID )); then
         break
     fi
