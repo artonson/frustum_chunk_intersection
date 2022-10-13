@@ -16,6 +16,8 @@ def main(options):
     if options.verbose:
         print('Loading data')
 
+    VoxelDataPaths.CHUNK_VOLUMES_DIR = 'data-geo-color-128'
+
     paths = VoxelDataPaths(
         data_root=options.data_dir,
         scene_id=options.scene_id,
@@ -23,6 +25,7 @@ def main(options):
         type_id=options.type_id,
         chunk_id=options.chunk_id,
         fraction=options.overlap_fraction,
+        max_distance_thr=options.max_distance_thr,
         verbose=options.verbose)
 
     paths.load()
@@ -31,6 +34,8 @@ def main(options):
         # used in determining which voxels represent surface
         volume.plot_sdf_thr = options.sdf_thr
 
+    if options.verbose:
+        print('Loading precomputed associations')
     camera_ids_to_check = None
     if None is not options.association_file:
         with open(options.association_file, 'r') as association_file:
@@ -116,6 +121,13 @@ def parse_args():
         help='when computing overlap between view and voxels, '
              'consider voxels with SDF smaller than this to be '
              'surface voxels.')
+    parser.add_argument(
+        '-dt', '--max-distance-thr',
+        dest='max_distance_thr',
+        type=float,
+        default=0.02,
+        help='when computing overlap between unprojected points from a view '
+             'and chunk\'s points, consider points within this range.  ')
 
     parser.add_argument(
         '-o', '--output-dir',
