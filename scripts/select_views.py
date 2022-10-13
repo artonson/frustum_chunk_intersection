@@ -31,10 +31,15 @@ def main(options):
         # used in determining which voxels represent surface
         volume.plot_sdf_thr = options.sdf_thr
 
+    camera_ids_to_check = None
+    if None is not options.association_file:
+        with open(options.association_file, 'r') as association_file:
+            camera_ids_to_check = association_file.read().splitlines()
+
     if options.verbose:
         print('Computing chunk-voxel visibility')
     if options.output_fraction:
-        visibility_map = paths.compute_fraction_voxels_in_view()
+        visibility_map = paths.compute_fraction_of_view_in_chunk(camera_ids_to_check=camera_ids_to_check)
     else:
         visibility_map = paths.compute_voxel_visibility()
 
@@ -88,6 +93,13 @@ def parse_args():
         required=True,
         help='name of the chunk to load [cmp, inc].')
 
+    parser.add_argument(
+        '-a', '--association-file',
+        dest='association_file',
+        type=PathType(exists=True, type='file', dash_ok=False),
+        required=False,
+        help='you can supply a file with per-line camera ID '
+             'to restrict the set of all camera IDs that will be considered.')
     parser.add_argument(
         '-l', '--overlap',
         dest='overlap_fraction',

@@ -14,7 +14,7 @@ from src.objects import (
     ChunkVolume, CameraView, VoxelChunkData, FullVolume, unproject_rgbd)
 
 
-def compute_fraction_voxels_in_view(
+def compute_fraction_of_view_in_chunk(
         chunk_volume: ChunkVolume,
         camera_view: CameraView,
         max_distance_thr: float = 0.02,
@@ -60,7 +60,7 @@ def is_visible(
         fraction: float = 0.8,
         max_distance_thr: float = 0.02,
 ):
-    fraction_inside = compute_fraction_voxels_in_view(
+    fraction_inside = compute_fraction_of_view_in_chunk(
         chunk_volume,
         camera_view,
         max_distance_thr=max_distance_thr)
@@ -248,7 +248,7 @@ class VoxelDataPaths:
                     visibility[chunk_volume.id].append(camera_view.id)
         return visibility
 
-    def compute_fraction_voxels_in_view(self, camera_ids_to_check=None) -> Mapping[int, Mapping[int, float]]:
+    def compute_fraction_of_view_in_chunk(self, camera_ids_to_check=None) -> Mapping[int, Mapping[int, float]]:
         visibility = defaultdict(lambda: defaultdict(float))
         for chunk_volume in self._data.chunk_volumes:
             if None is camera_ids_to_check:
@@ -258,7 +258,7 @@ class VoxelDataPaths:
             if self.verbose:
                 iterable = tqdm(iterable)
             for camera_view in iterable:
-                fraction = compute_fraction_voxels_in_view(
+                fraction = compute_fraction_of_view_in_chunk(
                     chunk_volume, camera_view, max_distance_thr=self.max_distance_thr)
                 visibility[chunk_volume.id][camera_view.id] = fraction
         return visibility
