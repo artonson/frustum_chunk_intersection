@@ -5,46 +5,65 @@ import os
 from typing import Mapping, Tuple, List
 
 import numpy as np
+from scipy.spatial import cKDTree
 import trimesh.transformations as tt
 from tqdm import tqdm
 
 from src.camera_pose import CameraPose
 from src.objects import (
-    ChunkVolume, CameraView, VoxelChunkData, FullVolume)
+    ChunkVolume, CameraView, VoxelChunkData, FullVolume, unproject_rgbd)
 
 
 def compute_fraction_voxels_in_view(
         chunk_volume: ChunkVolume,
         camera_view: CameraView,
-        frame_size: Tuple[int, int] = None,
+        max_distance_thr: float = 0.02,
 ):
-    """Compute fraction of points visible inside the view."""
-    points = chunk_volume.voxels_xyz  # generate points based on chunk_volume
-    projected = tt.transform_points(
-        CameraPose(camera_view.extrinsics).world_to_camera(points),
-        camera_view.intrinsics)
-    if None is not frame_size:
-        width, height = frame_size
-    else:
-        width = 2 * camera_view.intrinsics[0, 2]
-        height = 2 * camera_view.intrinsics[1, 2]
-    mask = (projected[:, 0] > 0) & (projected[:, 0] < width) \
-           & (projected[:, 1] > 0) & (projected[:, 1] < height) \
-           & (projected[:, 2] > 0)
+    """Compute fraction of points visible inside the view.
+
+    For this, we unproject depth from the input view into
+    the world frame, obtaining a 3D point cloud,
+    query the closest points from the chunk, and
+    count the fraction of the view's points that have
+    neighbours in this chunk within a tolerance.
+    """
+    chunk_points = chunk_volume.voxels_xyz  # generate points based on chunk_volume
+
+    # # the previous version below was projecting the points
+    # # into the view, then counting how many chunk's points
+    # # are visible in the view's frustum
+    # we're using it as a pre-check for speed.
+    min_depth: float = 1e-2
+    max_depth: float = 6.0
+    unprojected_pc = CameraPose(camera_view.extrinsics).world_to_camera(chunk_points)
+    depth = unprojected_pc[:, 2].copy()
+    unprojected_pc /= np.atleast_2d(depth).T
+    uv = tt.transform_points(unprojected_pc, camera_view.intrinsics)
+    height, width = camera_view.depth.shape
+    mask = (uv[:, 0] > 0) & (uv[:, 0] < width) \
+           & (uv[:, 1] > 0) & (uv[:, 1] < height) \
+           & (depth > min_depth)
     num_inside_points = np.sum(mask)
-    return num_inside_points / len(points)
+    if num_inside_points == 0:
+        return 0.
+
+    view_points = unproject_rgbd(camera_view).depth
+    view_point_to_chunk_distances, _ = cKDTree(chunk_points).query(
+    view_points, k=1, distance_upper_bound=max_distance_thr)
+    return np.sum(view_point_to_chunk_distances < np.inf) / len(view_point_to_chunk_distances)
+
 
 
 def is_visible(
         chunk_volume: ChunkVolume,
         camera_view: CameraView,
         fraction: float = 0.8,
-        frame_size: Tuple[int, int] = None,
+        max_distance_thr: float = 0.02,
 ):
     fraction_inside = compute_fraction_voxels_in_view(
         chunk_volume,
         camera_view,
-        frame_size,)
+        max_distance_thr=max_distance_thr)
     return fraction_inside >= fraction
 
 
@@ -65,7 +84,7 @@ class VoxelDataPaths:
     RGB_DIR = 'color'
     DEPTH_DIR = 'depth'
     CHUNK_VOLUMES_DIR = 'data-geo-color'
-    FULL_VOLUMES_DIR = 'mp_sdf_2cm_input'
+    FULL_VOLUMES_DIR = 'mp_sdf_2cm_target'
 
     def __init__(
             self,
@@ -76,6 +95,7 @@ class VoxelDataPaths:
             type_id: str = 'cmp',
             load: bool = False,
             fraction: float = 0.8,
+            max_distance_thr: float = 0.02,
             verbose: bool = False,
     ):
         self.data_root = data_root
@@ -83,6 +103,7 @@ class VoxelDataPaths:
         self.room_id = room_id
         self.type_id = type_id
         self.fraction = fraction
+        self.max_distance_thr = max_distance_thr
         self.verbose = verbose
 
         if chunk_id == '*':
@@ -222,19 +243,23 @@ class VoxelDataPaths:
             if self.verbose:
                 iterable = tqdm(iterable)
             for camera_view in iterable:
-                if is_visible(chunk_volume, camera_view, fraction=self.fraction):
+                if is_visible(chunk_volume, camera_view,
+                              fraction=self.fraction, max_distance_thr=self.max_distance_thr):
                     visibility[chunk_volume.id].append(camera_view.id)
         return visibility
 
-    def compute_fraction_voxels_in_view(self) -> Mapping[int, Mapping[int, float]]:
+    def compute_fraction_voxels_in_view(self, camera_ids_to_check=None) -> Mapping[int, Mapping[int, float]]:
         visibility = defaultdict(lambda: defaultdict(float))
         for chunk_volume in self._data.chunk_volumes:
-            iterable = self._data.camera_views.values()
+            if None is camera_ids_to_check:
+                camera_ids_to_check = self.camera_views.keys()
+            camera_ids_to_check = set(camera_ids_to_check)
+            iterable = [self.camera_views[camera_id] for camera_id in camera_ids_to_check]
             if self.verbose:
                 iterable = tqdm(iterable)
             for camera_view in iterable:
                 fraction = compute_fraction_voxels_in_view(
-                    chunk_volume, camera_view)
+                    chunk_volume, camera_view, max_distance_thr=self.max_distance_thr)
                 visibility[chunk_volume.id][camera_view.id] = fraction
         return visibility
 

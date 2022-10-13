@@ -46,7 +46,7 @@ def main(options):
             camera_views_in_room.append(camera_id)
 
     if options.verbose:
-        print('Saving outputs')
+        print(f'Saving outputs: found {len(camera_views_in_room)}')
     os.makedirs(options.output_dir, exist_ok=True)
     output_filename = os.path.join(
         options.output_dir,

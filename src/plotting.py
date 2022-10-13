@@ -7,6 +7,7 @@ import k3d.helpers
 import k3d.colormaps.matplotlib_color_maps
 import numpy as np
 import trimesh
+import trimesh.transformations as tt
 
 from src.camera_pose import CameraPose
 from src.colors import rgb_to_packed_colors
@@ -211,10 +212,11 @@ class CameraPlottable(Plottable):
 @dataclass
 class CameraFrustumPlottable(Plottable):
     camera_pose: CameraPose
-    focal_length: float  # in mm
     image_size: np.ndarray  # in pixels
-    sensor_size: np.ndarray  # in mm
-    principal_point: np.ndarray  # in pixels
+    focal_length: float = None  # in mm
+    sensor_size: np.ndarray = None  # in mm
+    principal_point: np.ndarray = None  # in pixels
+    intrinsics: np.ndarray = None  # if set, replaces previous params
     line_length: float = 1.0
     face_color: int = 0xbbbbbb
     wireframe: bool = False
@@ -224,22 +226,35 @@ class CameraFrustumPlottable(Plottable):
     def plot(self, k3d_plot):
         # compute coordinates of image corners in camera
         # reference frame
-        sx, sy = self.sensor_size / self.image_size  # mm/px
-        px, py = self.principal_point
         ix, iy = self.image_size
-        f = self.focal_length[0]
-        # the following is in screen coordinates
-        # (image plane, Y up, X right, origin = principal point)
-        l = -px * sx  # real-world X of the left side of the screen
-        r = (ix - px) * sx  # real-world X of the right size of the screen
-        b = -py * sy  # real-world Y of the bottom size of the screen
-        t = (iy - py) * sy  # real-world Y of the top size of the screen
-        image_corners = np.array([
-            [l, b, f],
-            [r, b, f],
-            [r, t, f],
-            [l, t, f],
-        ]) * self.line_length
+        if None is not self.intrinsics:
+            image_corners = np.array([
+                [ 0,  0, 1],
+                [ix,  0, 1],
+                [ix, iy, 1],
+                [ 0, iy, 1],
+            ])
+            image_corners = tt.transform_points(
+                image_corners,
+                np.linalg.inv(self.intrinsics))
+            image_corners *= self.line_length
+        else:
+            sx, sy = self.sensor_size / self.image_size  # mm/px
+            px, py = self.principal_point
+            f = self.focal_length[0]
+            # the following is in screen coordinates
+            # (image plane, Y up, X right, origin = principal point)
+            l = -px * sx  # real-world X of the left side of the screen
+            r = (ix - px) * sx  # real-world X of the right size of the screen
+            b = -py * sy  # real-world Y of the bottom size of the screen
+            t = (iy - py) * sy  # real-world Y of the top size of the screen
+            image_corners = np.array([
+                [l, b, f],
+                [r, b, f],
+                [r, t, f],
+                [l, t, f],
+            ]) * self.line_length
+
         image_corners = self.camera_pose.camera_to_world(image_corners)
 
         vertices = np.concatenate(

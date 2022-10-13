@@ -54,7 +54,9 @@ class CameraView(Plottable, PathsLoadable):
 
         depth_filename = paths.get_depth_filename(camera_id)
         try:
-            depth_array = np.asarray(PilImage.open(depth_filename), dtype=np.float_)
+            # depth_array = np.asarray(PilImage.open(depth_filename), dtype=np.uint16)
+            import imageio
+            depth_array = imageio.imread(depth_filename)
         except FileNotFoundError:
             depth_array = None
 
@@ -71,17 +73,80 @@ class CameraView(Plottable, PathsLoadable):
         elif self.plot_type == 'frustum':
             plottable = CameraFrustumPlottable(
                 camera_pose=CameraPose(self.extrinsics),
-                focal_length=[self.intrinsics[0, 0]],
-                image_size=np.array(self.rgb.shape[:2]),
-                principal_point=self.intrinsics[[0, 1], 2],
-                sensor_size=np.array(self.rgb.shape[:2]),
-                line_length=self.line_length, 
+                intrinsics=self.intrinsics,
+                image_size=np.array(self.depth.shape)[::-1],
+                line_length=self.line_length,
                 opacity=self.opacity,
                 name=str(self.id))
+            # plottable = CameraFrustumPlottable(
+            #     camera_pose=CameraPose(self.extrinsics),
+            #     focal_length=[self.intrinsics[0, 0]],
+            #     image_size=np.array(self.rgb.shape[:2]),
+            #     principal_point=self.intrinsics[[0, 1], 2],
+            #     sensor_size=np.array(self.rgb.shape[:2]),
+            #     line_length=self.line_length,
+            #     opacity=self.opacity,
+            #     name=str(self.id))
         else:
             raise ValueError(f'{self.plot_type}')
 
         return plottable.plot(k3d_plot)
+
+
+def project_rgbd(camera_view, points, colors):
+    """Given a scene with 3D points and RGB colors, and
+    a camera view with depth, rgb, intrinsics, and extrinsics,
+    compute an output camera view with depth, rgb, intrinsics, and extrinsics,
+    by projecting the 3D points to camera frame."""
+    unprojected_pc = CameraPose(camera_view.extrinsics).world_to_camera(points)
+    depth = unprojected_pc[:, 2].copy()
+    unprojected_pc /= np.atleast_2d(depth).T
+    uv = tt.transform_points(unprojected_pc, camera_view.intrinsics)
+    height, width = camera_view.depth.shape
+    mask = (uv[:, 0] > 0) & (uv[:, 0] < width) \
+           & (uv[:, 1] > 0) & (uv[:, 1] < height) \
+           & (depth > 1e-2)
+    uv_int = np.floor(uv[mask]).astype(np.int_)
+    out_depth = np.zeros_like(camera_view.depth, dtype=np.float32)
+    out_depth[uv_int[:, 1], uv_int[:, 0]] = depth[mask]
+    out_color = np.zeros_like(camera_view.rgb, dtype=np.int_)
+    out_color[uv_int[:, 1], uv_int[:, 0]] = colors[mask]
+
+    from copy import deepcopy
+    output_view = deepcopy(camera_view)
+    output_view.rgb = out_color
+    output_view.depth = out_depth
+    return output_view
+
+
+def unproject_rgbd(camera_view):
+    """Given a camera view with depth, rgb, intrinsics, and extrinsics,
+    compute a camera view with point cloud defined in global frame,
+    rgb, intrinsics, and extrinsics."""
+    pixels = camera_view.depth
+    height, width = pixels.shape
+    i, j = np.meshgrid(np.arange(width), np.arange(height))
+    image_integers = np.stack((
+        i.ravel(),
+        j.ravel(),
+        np.ones_like(i).ravel()
+    )).T  # [n, 3]
+    image_integers = image_integers.astype(np.float32)
+    depth_integers = pixels.ravel()
+    image_integers = image_integers[depth_integers != 0]
+    colors = camera_view.rgb.reshape((-1, 3))[depth_integers != 0]
+    depth = depth_integers[depth_integers != 0].astype(np.float32) / 1000
+    unprojected_depth = tt.transform_points(
+        image_integers,
+        np.linalg.inv(camera_view.intrinsics))
+    unprojected_depth *= np.atleast_2d(depth).T
+    unprojected_pc = CameraPose(camera_view.extrinsics).camera_to_world(unprojected_depth)
+
+    from copy import deepcopy
+    output_view = deepcopy(camera_view)
+    output_view.rgb = colors
+    output_view.depth = unprojected_pc
+    return output_view
 
 
 @dataclass
@@ -95,7 +160,7 @@ class ChunkVolume(Plottable, PathsLoadable):
     version: str = '2'  # 1 for older 64 chunks, 2 for newer 128 chunks
 
     plot_type: str = 'volume'  # or 'points' -- then u have color
-    plot_sdf_thr: float = 0.01
+    plot_sdf_thr: float = 0.5
     plot_colors: bool = True
 
     @classmethod
@@ -187,7 +252,7 @@ class FullVolume(Plottable, PathsLoadable):
     sparse_colors: np.ndarray
 
     plot_type: str = 'volume'  # or 'points' -- then u have color
-    plot_sdf_thr: float = 0.01
+    plot_sdf_thr: float = 0.5
     plot_colors: bool = True
 
     @classmethod
@@ -215,6 +280,19 @@ class FullVolume(Plottable, PathsLoadable):
         """Returns XYZ coordinates of voxel centers in world frame."""
         points, mask, transform = self._get_voxels_points_mask()
         return points
+
+    @property
+    def colors(self) -> np.ndarray:
+        """Returns XYZ coordinates of voxel centers in world frame."""
+        points, mask, transform = self._get_voxels_points_mask()
+        i, j, k = self.sparse_indexes[:, 0], \
+                  self.sparse_indexes[:, 1], \
+                  self.sparse_indexes[:, 2]
+        colors = self.sparse_colors[i, j, k]
+        return colors[mask]
+        # point_colors = rgb_to_packed_colors(
+        #     colors[mask, 0], colors[mask, 1], colors[mask, 2])
+        # return point_colors
 
     def plot(self, k3d_plot):
         if self.plot_type == 'volume':
