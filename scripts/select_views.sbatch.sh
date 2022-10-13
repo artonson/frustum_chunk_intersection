@@ -1,14 +1,15 @@
 #!/bin/bash
 
 #SBATCH --job-name=select-views
-#SBATCH --output=%A.out
-#SBATCH --error=%A.err
-#SBATCH --array=1-2
-#SBATCH --time=00:10:00
+#SBATCH --output=%A_%a.out
+#SBATCH --error=%A_%a.err
+#SBATCH --array=1-1644
+#SBATCH --time=10:00:00
 #SBATCH --partition=submit
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=1
-#SBATCH --mem-per-cpu=2g
+#SBATCH --mem-per-cpu=8g
+#SBATCH --oversubscribe
 
 __usage="
 Usage: $0 -d data_dir [-v] <INPUT_FILE
