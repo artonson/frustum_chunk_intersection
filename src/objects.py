@@ -3,14 +3,13 @@ from dataclasses import dataclass
 from typing import List, Tuple, Mapping
 
 import numpy as np
-from PIL import Image as PilImage
 import trimesh.transformations as tt
 
 from src.camera_pose import CameraPose
-from src.colors import rgb_to_packed_colors
-from src.plotting import Plottable, VolumePlottable, PointsPlottable, \
+from src.utils.colors import rgb_to_packed_colors
+from src.datasets import DataPaths
+from src.utils.plotting import Plottable, VolumePlottable, PointsPlottable, \
     CameraPlottable, CameraFrustumPlottable
-from src.sdf_reader import load_sdf
 
 
 def swap_xz(a: np.ndarray) -> np.ndarray:
@@ -21,12 +20,14 @@ def swap_xz(a: np.ndarray) -> np.ndarray:
 class PathsLoadable(ABC):
     @classmethod
     @abstractmethod
-    def from_paths(self, paths: 'VoxelDataPaths', *args, **kwargs): ...
+    def from_paths(cls, paths: DataPaths, *args, **kwargs): ...
 
 
 @dataclass
 class CameraView(Plottable, PathsLoadable):
     id: int
+    extrinsics_filename: str
+    intrinsics_filename: str
     rgb_filename: str
     depth_filename: str
     extrinsics: np.ndarray
@@ -39,29 +40,39 @@ class CameraView(Plottable, PathsLoadable):
     opacity: float = 1.0
 
     @classmethod
-    def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
+    def from_paths(cls, paths: DataPaths, *args, **kwargs):
         camera_id = args[0]
 
-        calib_filename = paths.get_calib_filename(camera_id)
-        camera_params = np.loadtxt(calib_filename)
-        extrinsics, intrinsics = camera_params[:4], camera_params[4:]
+        extrinsics_filename = paths.get_extrinsics_filename(camera_id)
+        try:
+            extrinsics = paths.get_extrinsics(extrinsics_filename)
+        except FileNotFoundError:
+            extrinsics = None
+
+        intrinsics_filename = paths.get_intrinsics_filename(camera_id)
+        try:
+            intrinsics = paths.get_extrinsics(intrinsics_filename)
+        except FileNotFoundError:
+            intrinsics = None
 
         rgb_filename = paths.get_rgb_filename(camera_id)
         try:
-            rgb_array = np.asarray(PilImage.open(rgb_filename))
+            rgb_array = paths.get_rgb(rgb_filename)
         except FileNotFoundError:
             rgb_array = None
 
         depth_filename = paths.get_depth_filename(camera_id)
         try:
-            # depth_array = np.asarray(PilImage.open(depth_filename), dtype=np.uint16)
-            import imageio
-            depth_array = imageio.imread(depth_filename)
+            depth_array = paths.get_depth(depth_filename)
         except FileNotFoundError:
             depth_array = None
 
-        return cls(camera_id, rgb_filename, depth_filename,
-                   extrinsics, intrinsics, rgb_array, depth_array)
+        return cls(
+            camera_id,
+            extrinsics_filename, intrinsics_filename,
+            rgb_filename, depth_filename,
+            extrinsics, intrinsics,
+            rgb_array, depth_array)
 
     def plot(self, k3d_plot):
         if self.plot_type == 'axes':
@@ -157,44 +168,22 @@ class ChunkVolume(Plottable, PathsLoadable):
     transform: np.ndarray
     known: np.ndarray
     colors: np.ndarray
-    version: str = '2'  # 1 for older 64 chunks, 2 for newer 128 chunks
 
     plot_type: str = 'volume'  # or 'points' -- then u have color
     plot_sdf_thr: float = 0.5
     plot_colors: bool = True
 
     @classmethod
-    def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
+    def from_paths(cls, paths: DataPaths, *args, **kwargs):
         chunk_id = args[0]
-
         chunk_filename = paths.get_chunk_filename(chunk_id)
-        if cls.version == '1':
-            load_colors = True
-        elif cls.version == '2':
-            load_colors = False
-        else:
-            raise ValueError(
-                f'Version {cls.version} of {cls.__name__} is unknown')
-
-        sdf, chunk_transform, known, colors = load_sdf(
-            file=chunk_filename,
-            load_sparse=False,
-            load_known=False,
-            load_colors=load_colors,
-            color_file=None)
-        sdf[sdf == -np.inf] = np.inf
-
-        if cls.version == '2':
-            assert None is not paths.full_volume, \
-                f'you must first load full volume in version {cls.version}'
-            scene_transform = paths.full_volume.transform
-            scene_translation = scene_transform[:3, 3]
-            chunk_translation = chunk_transform[:3, 3]
-            relative_translation = chunk_translation - scene_translation
-            corrected_chunk_origin = scene_translation - relative_translation
-            chunk_transform[:3, 3] = corrected_chunk_origin
-
-        return cls(chunk_id, chunk_filename, sdf,  chunk_transform, known, colors)
+        try:
+            sdf, chunk_transform, known, colors = \
+                paths.get_chunk(chunk_filename)
+        except FileNotFoundError:
+            raise
+        return cls(chunk_id, chunk_filename, sdf,
+                   chunk_transform, known, colors)
 
     def plot(self, k3d_plot):
         if self.plot_type == 'volume':
@@ -256,17 +245,14 @@ class FullVolume(Plottable, PathsLoadable):
     plot_colors: bool = True
 
     @classmethod
-    def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
-        sdf_filename, rgb_filename = paths.get_full_filenames()
-        (indexes, sdf), shape, transform, known, rgb = load_sdf(
-            file=sdf_filename,
-            load_sparse=True,
-            load_known=False,
-            load_colors=True,
-            color_file=rgb_filename)
-        room = np.ones(shape, dtype=np.float32) * np.inf
-        room[indexes[:, 0], indexes[:, 1], indexes[:, 2]] = sdf
-        return cls(indexes, sdf, shape, room, transform, known, rgb)
+    def from_paths(cls, paths: DataPaths, *args, **kwargs):
+        sdf_filename, rgb_filename = paths.get_scene_filename()
+        try:
+            indexes, sdf, shape, room, transform, known, colors = \
+                paths.get_scene((sdf_filename, rgb_filename))
+        except FileNotFoundError:
+            raise
+        return cls(indexes, sdf, shape, room, transform, known, colors)
 
     def _get_voxels_points_mask(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         mask = np.abs(self.sparse_sdf) < self.plot_sdf_thr
@@ -337,7 +323,7 @@ class VoxelChunkData(Plottable, PathsLoadable):
     full_volume: FullVolume = None
 
     @classmethod
-    def from_paths(cls, paths: 'VoxelDataPaths', *args, **kwargs):
+    def from_paths(cls, paths: DataPaths, *args, **kwargs):
         pass
 
     def plot(self, k3d_plot):
@@ -355,4 +341,6 @@ __all__ = [
     'FullVolume',
     'VoxelChunkData',
     'CameraByChunk',
+    'project_rgbd',
+    'unproject_rgbd',
 ]

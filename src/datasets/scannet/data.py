@@ -1,90 +1,30 @@
 import glob
 import sys
-from collections import defaultdict
 import os
-from typing import Mapping, Tuple, List
+from typing import Mapping, List, Tuple
 
+import imageio
 import numpy as np
 from scipy.spatial import cKDTree
 import trimesh.transformations as tt
 from tqdm import tqdm
 
 from src.camera_pose import CameraPose
+from src.datasets import DataPaths
 from src.objects import (
     ChunkVolume, CameraView, VoxelChunkData, FullVolume, unproject_rgbd)
+from src.datasets.matterport3d.reader import load_sdf
 
 
-def compute_fraction_of_view_in_chunk(
-        chunk_volume: ChunkVolume,
-        camera_view: CameraView,
-        max_distance_thr: float = 0.02,
-):
-    """Compute fraction of points visible inside the view.
-
-    For this, we unproject depth from the input view into
-    the world frame, obtaining a 3D point cloud,
-    query the closest points from the chunk, and
-    count the fraction of the view's points that have
-    neighbours in this chunk within a tolerance.
-    """
-    chunk_points = chunk_volume.voxels_xyz  # generate points based on chunk_volume
-
-    # # the previous version below was projecting the points
-    # # into the view, then counting how many chunk's points
-    # # are visible in the view's frustum
-    # we're using it as a pre-check for speed.
-    min_depth: float = 1e-2
-    max_depth: float = 6.0
-    unprojected_pc = CameraPose(camera_view.extrinsics).world_to_camera(chunk_points)
-    depth = unprojected_pc[:, 2].copy()
-    unprojected_pc /= np.atleast_2d(depth).T
-    uv = tt.transform_points(unprojected_pc, camera_view.intrinsics)
-    height, width = camera_view.depth.shape
-    mask = (uv[:, 0] > 0) & (uv[:, 0] < width) \
-           & (uv[:, 1] > 0) & (uv[:, 1] < height) \
-           & (depth > min_depth)
-    num_inside_points = np.sum(mask)
-    if num_inside_points == 0:
-        return 0.
-
-    view_points = unproject_rgbd(camera_view).depth
-    view_point_to_chunk_distances, _ = cKDTree(chunk_points).query(
-    view_points, k=1, distance_upper_bound=max_distance_thr)
-    return np.sum(view_point_to_chunk_distances < np.inf) / len(view_point_to_chunk_distances)
-
-
-
-def is_visible(
-        chunk_volume: ChunkVolume,
-        camera_view: CameraView,
-        fraction: float = 0.8,
-        max_distance_thr: float = 0.02,
-):
-    fraction_inside = compute_fraction_of_view_in_chunk(
-        chunk_volume,
-        camera_view,
-        max_distance_thr=max_distance_thr)
-    return fraction_inside >= fraction
-
-
-def split_chunkvolume_filename(s):
-    # f'{self.scene_id}_room{self.room_id}__{self.type}__{self.chunk_id}.sdf'
-    s = os.path.basename(s)
-    s, sdf = os.path.splitext(s)
-    scene_room, tp, chunk_id = s.split('__')
-    scene_id, room_id = scene_room.split('_')
-    room_id = room_id[4:]
-    return scene_id, room_id, tp, chunk_id
-
-
-class VoxelDataPaths:
+class ScannetDataPaths(DataPaths):
     DATA_FRAMES_DIR = 'data-frames'
-    IMAGES_DIR = 'images'
-    CALIB_DIR = 'camera'
+    IMAGES_DIR = 'scannet_re'
+    INTRINSICS_DIR = 'intrinsic'
+    EXTRINSICS_DIR = 'pose'
     RGB_DIR = 'color'
     DEPTH_DIR = 'depth'
-    CHUNK_VOLUMES_DIR = 'data-geo-color'
-    FULL_VOLUMES_DIR = 'mp_sdf_2cm_target'
+    CHUNK_VOLUMES_DIR = 'scannet_chunk_128'
+    FULL_VOLUMES_DIR = 'scannet_sem3dlabel_nyu40'
 
     def __init__(
             self,
@@ -98,13 +38,13 @@ class VoxelDataPaths:
             max_distance_thr: float = 0.02,
             verbose: bool = False,
     ):
+        super().__init__(verbose)
         self.data_root = data_root
         self.scene_id = scene_id
         self.room_id = room_id
         self.type_id = type_id
         self.fraction = fraction
         self.max_distance_thr = max_distance_thr
-        self.verbose = verbose
 
         if chunk_id == '*':
             wildcard = self.get_chunk_filename('*')
@@ -117,10 +57,18 @@ class VoxelDataPaths:
         if load:
             self._data = self._load()
 
-    def get_calib_filename(self, camera_id):
+    def get_extrinsics_filename(self, camera_id):
         calib_filename = os.path.join(
             self.data_root, self.IMAGES_DIR, self.scene_id,
-            self.CALIB_DIR, f'{camera_id}.txt')
+            self.EXTRINSICS_DIR, f'{camera_id}.txt')
+        if self.verbose:
+            print(calib_filename)
+        return calib_filename
+
+    def get_intrinsics_filename(self, camera_id):
+        calib_filename = os.path.join(
+            self.data_root, self.IMAGES_DIR, self.scene_id,
+            self.INTRINSICS_DIR, f'{camera_id}.txt')
         if self.verbose:
             print(calib_filename)
         return calib_filename
@@ -141,6 +89,24 @@ class VoxelDataPaths:
             print(depth_filename)
         return depth_filename
 
+    def get_extrinsics(self, extrinsics_filename: str) -> np.array:
+        camera_params = np.loadtxt(extrinsics_filename)
+        extrinsics, intrinsics = camera_params[:4], camera_params[4:]
+        return extrinsics
+
+    def get_intrinsics(self, intrinsics_filename) -> np.array:
+        camera_params = np.loadtxt(intrinsics_filename)
+        extrinsics, intrinsics = camera_params[:4], camera_params[4:]
+        return intrinsics
+
+    def get_depth(self, depth_filename: str) -> np.array:
+        depth_array = imageio.imread(depth_filename)
+        return depth_array
+
+    def get_rgb(self, rgb_filename: str) -> np.array:
+        rgb_array = imageio.imread(rgb_filename)
+        return rgb_array
+
     def get_cameras_dataframe_filename(self, chunk_id):
         df_filename = os.path.join(self.data_root, self.DATA_FRAMES_DIR,
             f'{self.scene_id}_room{self.room_id}__{self.type_id}__{chunk_id}.txt')
@@ -156,7 +122,36 @@ class VoxelDataPaths:
             print(chunk_filename)
         return chunk_filename
 
-    def get_full_filenames(self):
+    def get_chunk(self, chunk_filename: str) -> Tuple:
+        if self.CHUNK_VERSION == '1':
+            load_colors = True
+        elif self.CHUNK_VERSION == '2':
+            load_colors = False
+        else:
+            raise ValueError(
+                f'Version {self.CHUNK_VERSION} of {self.__name__} is unknown')
+
+        sdf, chunk_transform, known, colors = load_sdf(
+            file=chunk_filename,
+            load_sparse=False,
+            load_known=False,
+            load_colors=load_colors,
+            color_file=None)
+        sdf[sdf == -np.inf] = np.inf
+
+        if self.CHUNK_VERSION == '2':
+            assert None is not self.full_volume, \
+                f'you must first load full volume in version {self.CHUNK_VERSION}'
+            scene_transform = self.full_volume.transform
+            scene_translation = scene_transform[:3, 3]
+            chunk_translation = chunk_transform[:3, 3]
+            relative_translation = chunk_translation - scene_translation
+            corrected_chunk_origin = scene_translation - relative_translation
+            chunk_transform[:3, 3] = corrected_chunk_origin
+
+        return sdf, chunk_transform, known, colors
+
+    def get_scene_filename(self, scene_id: str) -> str:
         sdf_filename = os.path.join(self.data_root, self.FULL_VOLUMES_DIR,
             f'{self.scene_id}_room{self.room_id}__{0}__.sdf')
         rgb_filename = os.path.join(self.data_root, self.FULL_VOLUMES_DIR,
@@ -164,6 +159,18 @@ class VoxelDataPaths:
         if self.verbose:
             print(sdf_filename) ; print((rgb_filename))
         return sdf_filename, rgb_filename
+
+    def get_scene(self, scene_filename) -> Tuple:
+        sdf_filename, rgb_filename = scene_filename
+        (indexes, sdf), shape, transform, known, colors = load_sdf(
+            file=sdf_filename,
+            load_sparse=True,
+            load_known=False,
+            load_colors=True,
+            color_file=rgb_filename)
+        room = np.ones(shape, dtype=np.float32) * np.inf
+        room[indexes[:, 0], indexes[:, 1], indexes[:, 2]] = sdf
+        return indexes, sdf, shape, room, transform, known, colors
 
     def _load(self) -> VoxelChunkData:
         # camera IDs
@@ -186,7 +193,7 @@ class VoxelDataPaths:
 
         if None is camera_ids:
             # load all cameras
-            wildcard = self.get_calib_filename('*')
+            wildcard = self.get_extrinsics_filename('*')
             filenames = glob.glob(wildcard)
             camera_ids = [os.path.splitext(os.path.basename(filename))[0]
                           for filename in filenames]
@@ -232,49 +239,3 @@ class VoxelDataPaths:
             self._data.chunk_volumes = chunk_volumes
 
         return self._data
-
-    def load(self):
-        self._data = self._load()
-
-    def compute_voxel_visibility(self) -> Mapping[int, List[int]]:
-        visibility = defaultdict(list)
-        for chunk_volume in self._data.chunk_volumes:
-            iterable = self._data.camera_views.values()
-            if self.verbose:
-                iterable = tqdm(iterable)
-            for camera_view in iterable:
-                if is_visible(chunk_volume, camera_view,
-                              fraction=self.fraction, max_distance_thr=self.max_distance_thr):
-                    visibility[chunk_volume.id].append(camera_view.id)
-        return visibility
-
-    def compute_fraction_of_view_in_chunk(self, camera_ids_to_check=None) -> Mapping[int, Mapping[int, float]]:
-        visibility = defaultdict(lambda: defaultdict(float))
-        for chunk_volume in self._data.chunk_volumes:
-            if None is camera_ids_to_check:
-                camera_ids_to_check = self.camera_views.keys()
-            camera_ids_to_check = set(camera_ids_to_check)
-            iterable = [self.camera_views[camera_id] for camera_id in camera_ids_to_check]
-            if self.verbose:
-                iterable = tqdm(iterable)
-            for camera_view in iterable:
-                fraction = compute_fraction_of_view_in_chunk(
-                    chunk_volume, camera_view, max_distance_thr=self.max_distance_thr)
-                visibility[chunk_volume.id][camera_view.id] = fraction
-        return visibility
-
-    @property
-    def full_volume(self):
-        return self._data.full_volume
-
-    @property
-    def camera_views(self):
-        return self._data.camera_views
-
-    @property
-    def chunk_volumes(self):
-        return self._data.chunk_volumes
-
-    @property
-    def camera_ids(self):
-        return self._data.camera_ids

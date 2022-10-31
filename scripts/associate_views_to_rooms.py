@@ -11,7 +11,7 @@ __dir__ = os.path.normpath(os.path.join(__this_dir__, '..'))
 sys.path[1:1] = [__dir__]
 
 from src.argparse import PathType
-from src.voxel_chunk_data import VoxelDataPaths
+from src.matterport3d_data import VoxelDataPaths
 
 
 def main(options):
