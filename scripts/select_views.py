@@ -8,7 +8,7 @@ __this_dir__ = os.path.dirname(os.path.realpath(__file__))
 __dir__ = os.path.normpath(os.path.join(__this_dir__, '..'))
 sys.path[1:1] = [__dir__]
 
-from src.argparse import PathType
+from src.utils.argparse import PathType
 from src.datasets.matterport3d.data import Matterport3dDataPaths
 
 
@@ -24,8 +24,6 @@ def main(options):
         room_id=options.room_id,
         type_id=options.type_id,
         chunk_id=options.chunk_id,
-        fraction=options.overlap_fraction,
-        max_distance_thr=options.max_distance_thr,
         verbose=options.verbose)
 
     paths.load()
@@ -44,7 +42,9 @@ def main(options):
     if options.verbose:
         print('Computing chunk-voxel visibility')
     if options.output_fraction:
-        visibility_map = paths.compute_fraction_of_view_in_chunk(camera_ids_to_check=camera_ids_to_check)
+        visibility_map = paths.compute_fraction_of_view_in_chunk(
+            camera_ids_to_check=camera_ids_to_check,
+            max_distance_thr=options.max_distance_thr)
     else:
         visibility_map = paths.compute_voxel_visibility()
 

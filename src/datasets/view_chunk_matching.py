@@ -1,4 +1,10 @@
 import numpy as np
+import trimesh.transformations as tt
+from scipy.spatial import cKDTree
+
+from src.geometry.camera_pose import CameraPose
+from src.geometry.projection import unproject_rgbd
+from src.objects import ChunkVolume, CameraView
 
 
 def compute_fraction_of_view_in_chunk(
@@ -14,7 +20,8 @@ def compute_fraction_of_view_in_chunk(
     count the fraction of the view's points that have
     neighbours in this chunk within a tolerance.
     """
-    chunk_points = chunk_volume.voxels_xyz  # generate points based on chunk_volume
+    # generate points based on chunk_volume
+    chunk_points = chunk_volume.volume.xyz_world
 
     # # the previous version below was projecting the points
     # # into the view, then counting how many chunk's points
@@ -22,7 +29,8 @@ def compute_fraction_of_view_in_chunk(
     # we're using it as a pre-check for speed.
     min_depth: float = 1e-2
     max_depth: float = 6.0
-    unprojected_pc = CameraPose(camera_view.extrinsics).world_to_camera(chunk_points)
+    unprojected_pc = CameraPose(camera_view.extrinsics)\
+        .world_to_camera(chunk_points)
     depth = unprojected_pc[:, 2].copy()
     unprojected_pc /= np.atleast_2d(depth).T
     uv = tt.transform_points(unprojected_pc, camera_view.intrinsics)
@@ -36,7 +44,7 @@ def compute_fraction_of_view_in_chunk(
 
     view_points = unproject_rgbd(camera_view).depth
     view_point_to_chunk_distances, _ = cKDTree(chunk_points).query(
-    view_points, k=1, distance_upper_bound=max_distance_thr)
+        view_points, k=1, distance_upper_bound=max_distance_thr)
     return np.sum(view_point_to_chunk_distances < np.inf) / \
            len(view_point_to_chunk_distances)
 

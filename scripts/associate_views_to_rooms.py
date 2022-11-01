@@ -10,18 +10,18 @@ __this_dir__ = os.path.dirname(os.path.realpath(__file__))
 __dir__ = os.path.normpath(os.path.join(__this_dir__, '..'))
 sys.path[1:1] = [__dir__]
 
-from src.argparse import PathType
-from src.matterport3d_data import VoxelDataPaths
+from src.utils.argparse import PathType
+from src.datasets.matterport3d.data import Matterport3dDataPaths
 
 
 def main(options):
     if options.verbose:
         print('Loading data')
 
-    VoxelDataPaths.CHUNK_VOLUMES_DIR = 'none'  # don't load chunks
-    VoxelDataPaths.RGB_DIR = 'none'  # don't load RGB
-    VoxelDataPaths.DEPTH_DIR = 'none'  # don't load depth
-    paths = VoxelDataPaths(
+    Matterport3dDataPaths.CHUNK_VOLUMES_DIR = 'none'  # don't load chunks
+    Matterport3dDataPaths.RGB_DIR = 'none'  # don't load RGB
+    Matterport3dDataPaths.DEPTH_DIR = 'none'  # don't load depth
+    paths = Matterport3dDataPaths(
         data_root=options.data_dir,
         scene_id=options.scene_id,
         room_id=options.room_id,
@@ -31,11 +31,11 @@ def main(options):
 
     paths.load()
 
-    full_volume = paths.full_volume
-    full_volume.plot_sdf_thr = options.sdf_thr
+    scene_volume = paths.scene_volume
+    scene_volume.plot_sdf_thr = options.sdf_thr
     bbox = np.vstack(
-        (np.min(full_volume.voxels_xyz, axis=0),
-         np.max(full_volume.voxels_xyz, axis=0)))
+        (np.min(scene_volume.volume.xyz_world, axis=0),
+         np.max(scene_volume.volume.xyz_world, axis=0)))
 
     if options.verbose:
         print('Computing room-view association')
