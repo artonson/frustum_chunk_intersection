@@ -1,21 +1,25 @@
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Mapping
+from typing import List, Mapping, TYPE_CHECKING
 
 import numpy as np
+from skimage.transform import resize
+
+if TYPE_CHECKING:
+    from src.datasets.base import DataPaths
 
 from src.geometry.camera_pose import CameraPose
+from src.geometry.volume_view import VolumeView
 from src.utils.colors import rgb_to_packed_colors
-from src.datasets.base import DataPaths
 from src.utils.plotting import Plottable, VolumePlottable, PointsPlottable, \
     CameraPlottable, CameraFrustumPlottable
-from src.geometry.volume_view import VolumeView
 
 
 class PathsLoadable(ABC):
     @classmethod
     @abstractmethod
-    def from_paths(cls, paths: DataPaths, *args, **kwargs): ...
+    def from_paths(cls, paths: 'DataPaths', *args, **kwargs): ...
 
 
 @dataclass
@@ -35,32 +39,47 @@ class CameraView(Plottable, PathsLoadable):
     opacity: float = 1.0
 
     @classmethod
-    def from_paths(cls, paths: DataPaths, *args, **kwargs):
+    def from_paths(cls, paths: 'DataPaths', *args, **kwargs):
         camera_id = args[0]
 
         extrinsics_filename = paths.get_extrinsics_filename(camera_id)
         try:
             extrinsics = paths.get_extrinsics(extrinsics_filename)
         except FileNotFoundError:
+            warnings.warn(f'Could not find extrinrics at {extrinsics_filename}')
             extrinsics = None
 
         intrinsics_filename = paths.get_intrinsics_filename(camera_id)
         try:
-            intrinsics = paths.get_extrinsics(intrinsics_filename)
+            intrinsics = paths.get_intrinsics(intrinsics_filename)
         except FileNotFoundError:
+            warnings.warn(f'Could not find intrinsics at {intrinsics_filename}')
             intrinsics = None
 
         rgb_filename = paths.get_rgb_filename(camera_id)
         try:
             rgb_array = paths.get_rgb(rgb_filename)
         except FileNotFoundError:
+            warnings.warn(f'Could not find RGB image at {rgb_filename}')
             rgb_array = None
 
         depth_filename = paths.get_depth_filename(camera_id)
         try:
             depth_array = paths.get_depth(depth_filename)
         except FileNotFoundError:
+            warnings.warn(f'Could not find depth image at {depth_filename}')
             depth_array = None
+
+        resize_rgb_to_depth = kwargs.get('resize_rgb_to_depth', False)
+        if resize_rgb_to_depth and None is not rgb_array \
+                and None is not depth_array:
+            warnings.warn(f'Resizing RGB from {str(rgb_array.shape)} '
+                          f'to {str(depth_array.shape)}')
+            rgb_array = resize(
+                rgb_array,
+                depth_array.shape,
+                anti_aliasing=True,
+                preserve_range=True).astype(np.uint8)
 
         return cls(
             camera_id,
@@ -110,7 +129,7 @@ class ChunkVolume(Plottable, PathsLoadable):
     plot_colors: bool = True
 
     @classmethod
-    def from_paths(cls, paths: DataPaths, *args, **kwargs):
+    def from_paths(cls, paths: 'DataPaths', *args, **kwargs):
         chunk_id = args[0]
         chunk_filename = paths.get_chunk_filename(chunk_id)
         try:
@@ -130,19 +149,22 @@ class ChunkVolume(Plottable, PathsLoadable):
 
         elif self.plot_type == 'points':
             # volume = self.volume.to_dense()
-            mask = np.abs(self.volume.sdf_xyz) < self.plot_sdf_thr
+            mask = (np.abs(self.volume.sdf_xyz) < self.plot_sdf_thr).ravel()
+            print(mask.shape)
             points = self.volume.xyz_world[mask]
+            print(points.shape)
             transform = self.volume.grid_to_world
             voxel_size_in_mm = float(transform[0, 0])
             args = dict(points=points, point_size=voxel_size_in_mm)
             if self.plot_colors:
-                c = self.volume.colors_xyz[mask]
-                if None is not c:
+                if None is not self.volume.colors:
+                    c = self.volume.colors_xyz[mask]
                     r, g, b = c[:, 0], c[:, 1], c[:, 2]
                     point_colors = rgb_to_packed_colors(r, g, b)
                     args['point_colors'] = point_colors
                 else:
-                    args['attrs'] = np.abs(self.volume.sdf_xyz[mask].ravel())
+                    print(self.volume.sdf_xyz.shape, )
+                    args['attrs'] = np.abs(self.volume.sdf_xyz.ravel()[mask])
             plottable = PointsPlottable(**args)
 
         else:
@@ -162,14 +184,14 @@ class SceneVolume(ChunkVolume):
     # plot_colors: bool = True
 
     @classmethod
-    def from_paths(cls, paths: DataPaths, *args, **kwargs):
+    def from_paths(cls, paths: 'DataPaths', *args, **kwargs):
         scene_id = args[0]
-        sdf_filename, rgb_filename = paths.get_scene_filename(scene_id)
+        filenames = paths.get_scene_filename(scene_id)
         try:
-            volume = paths.get_scene((sdf_filename, rgb_filename))
+            volume = paths.get_scene(filenames)
         except FileNotFoundError:
             raise
-        return cls(scene_id, (sdf_filename, rgb_filename), volume)
+        return cls(scene_id, filenames, volume)
 
     # def _get_voxels_points_mask(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     #     mask = np.abs(self.sparse_sdf) < self.plot_sdf_thr
@@ -240,7 +262,7 @@ class VoxelChunkData(Plottable, PathsLoadable):
     scene_volume: SceneVolume = None
 
     @classmethod
-    def from_paths(cls, paths: DataPaths, *args, **kwargs):
+    def from_paths(cls, paths: 'DataPaths', *args, **kwargs):
         pass
 
     def plot(self, k3d_plot):

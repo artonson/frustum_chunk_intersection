@@ -6,8 +6,12 @@ dependencies:
   - pip>=20.3
   - numpy>=1.23
   - scipy>=1.9
-  - k3d-jupyter==2.14.5
+  - k3d==2.14.5
   - trimesh>=3.14
-  - Pillow
-  -
-
+  - Pillow=9.2.0
+  - imageio>=2.22
+  - notebook>=6.5
+  - tqdm
+  - matplotlib
+  - ipywidgets=7.5.1
+  - scikit-image

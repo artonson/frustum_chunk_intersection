@@ -1,6 +1,7 @@
 import glob
 import sys
 import os
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Mapping, List
 
@@ -9,13 +10,14 @@ import numpy as np
 from tqdm import tqdm
 
 from src.datasets.base import DataPaths
-from src.datasets.view_chunk_matching import compute_fraction_of_view_in_chunk, \
-    is_visible
+from src.datasets.view_chunk_matching import (
+    compute_fraction_of_view_in_chunk,
+    is_visible)
 from src.objects import (
     ChunkVolume, CameraView, VoxelChunkData, SceneVolume)
 
 
-class LargeScaleIndoorDataPaths(DataPaths):
+class LargeScaleIndoorDataPaths(DataPaths, ABC):
     """
     Shared functions for datasets.
     The general structure that is assumed is as follows:
@@ -39,27 +41,20 @@ class LargeScaleIndoorDataPaths(DataPaths):
             data_root: str,
             scene_id: str,
             chunk_id: str = '*',
-            type_id: str = 'cmp',
-            load: bool = False,
             verbose: bool = False,
     ):
         super().__init__(verbose)
 
         self.data_root = data_root
         self.scene_id = scene_id
-        self.type_id = type_id
-        self.chunk_ids = [chunk_id]
-
         if chunk_id == '*':
-            wildcard = self.get_chunk_filename('*')
-            chunk_filenames = glob.glob(wildcard)
-            self.chunk_ids = [split_chunkvolume_filename(fn)[-1] for fn in chunk_filenames]
+            self.chunk_ids = self.get_chunk_ids_by_wildcard()
         else:
             self.chunk_ids = [chunk_id]
+        self.resize_rgb_to_depth = False
 
-        self._data = VoxelChunkData()
-        if load:
-            self._data = self._load()
+    @abstractmethod
+    def get_chunk_ids_by_wildcard(self) -> List[str]: ...
 
     def get_extrinsics_filename(self, camera_id):
         calib_filename = os.path.join(
@@ -122,7 +117,8 @@ class LargeScaleIndoorDataPaths(DataPaths):
         if os.path.exists(os.path.join(self.data_root, self.IMAGES_DIR)):
             try:
                 camera_views = {
-                    camera_id: CameraView.from_paths(self, camera_id)
+                    camera_id: CameraView.from_paths(self, camera_id,
+                        resize_rgb_to_depth=self.resize_rgb_to_depth)
                     for camera_id in camera_ids}
             except Exception as e:
                 print(f'Cannot read camera views: {str(e)}', file=sys.stderr)

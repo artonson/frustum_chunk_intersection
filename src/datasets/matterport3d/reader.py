@@ -79,7 +79,7 @@ def load_sdf(file, load_sparse, load_known, load_colors, is_sparse_file=True, co
                     colors = struct.unpack('B'*num*3, cfin.read(num*3))
                     colors = np.asarray(colors, dtype=np.uint8).reshape(num, 3)
                     #TODO always loads dense
-                    colors = sparse_to_dense_np(locs, colors, cdimx, cdimy, cdimz, 0)
+                    # colors = sparse_to_dense_np(locs, colors, cdimx, cdimy, cdimz, 0)
                 else:
                     colors = struct.unpack('B'*cdimz*cdimy*cdimx*3, cfin.read(cdimz*cdimy*cdimx*3))
                     colors = np.asarray(colors, dtype=np.uint8).reshape([cdimz, cdimy, cdimx, 3])

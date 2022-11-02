@@ -1,11 +1,14 @@
+import glob
 import os
 import sys
+from typing import List
 
 import numpy as np
 
 from src.datasets.large_scale_indoor import LargeScaleIndoorDataPaths
 from src.datasets.matterport3d.reader import load_sdf
 from src.geometry.volume_view import DenseVolumeView, VolumeView, SparseVolumeView
+from src.objects import VoxelChunkData
 
 
 def split_chunkvolume_filename(s):
@@ -21,10 +24,11 @@ def split_chunkvolume_filename(s):
 class Matterport3dDataPaths(LargeScaleIndoorDataPaths):
     DATA_FRAMES_DIR = 'data-frames'
     IMAGES_DIR = 'images'
-    CALIB_DIR = 'camera'
+    EXTRINSICS_DIR = 'camera'
+    INTRINSICS_DIR = 'camera'
     RGB_DIR = 'color'
     DEPTH_DIR = 'depth'
-    CHUNK_VOLUMES_DIR = 'data-geo-color'
+    CHUNK_VOLUMES_DIR = 'data-geo-color-128'
     SCENE_VOLUMES_DIR = 'mp_sdf_2cm_target'
     CHUNK_VERSION = '2'  # 1 for older 64 chunks, 2 for newer 128 chunks
 
@@ -38,11 +42,24 @@ class Matterport3dDataPaths(LargeScaleIndoorDataPaths):
             load: bool = False,
             verbose: bool = False,
     ):
+        # need that set before call to get_chunk_ids
+        self.room_id = room_id
+        self.type_id = type_id
         super().__init__(
             data_root=data_root,
             scene_id=scene_id,
-            chunk_id=)
-        self.room_id = room_id
+            chunk_id=chunk_id,
+            verbose=verbose)
+
+        self._data = VoxelChunkData()
+        if load:
+            self._data = self._load()
+
+    def get_chunk_ids_by_wildcard(self) -> List[str]:
+        wildcard = self.get_chunk_filename('*')
+        chunk_filenames = glob.glob(wildcard)
+        chunk_ids = [split_chunkvolume_filename(fn)[-1] for fn in chunk_filenames]
+        return chunk_ids
 
     def get_cameras_dataframe_filename(self, chunk_id):
         df_filename = os.path.join(

@@ -9,7 +9,7 @@ import numpy as np
 import trimesh
 import trimesh.transformations as tt
 
-from src.camera_pose import CameraPose
+from src.geometry.camera_pose import CameraPose
 from src.utils.colors import rgb_to_packed_colors
 
 

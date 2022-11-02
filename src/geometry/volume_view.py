@@ -52,15 +52,15 @@ class VolumeView(ABC):
     def zyx_grid(self) -> np.ndarray: pass
 
     @property
+    def xyz_grid(self) -> np.ndarray:
+        return zyx_to_xyz(self.zyx_grid)
+
+    @property
     def zyx_world(self):
-        if None is not self._zyx_world:
+        if None is self._zyx_world:
             xyz_world = tt.transform_points(self.xyz_grid, self.grid_to_world)
             self._zyx_world = zyx_to_xyz(xyz_world)
         return self._zyx_world
-
-    @property
-    def xyz_grid(self) -> np.ndarray:
-        return zyx_to_xyz(self.zyx_grid)
 
     @property
     def xyz_world(self) -> np.ndarray:
@@ -77,7 +77,7 @@ class VolumeView(ABC):
 
     @property
     def shape_zyx(self):
-        if None is not self.shape:
+        if None is self.shape:
             self.shape = self.sdf.shape  # beware: zyx ordering
         return self.shape
 
@@ -118,11 +118,11 @@ class DenseVolumeView(VolumeView):
 
     @property
     def zyx_grid(self):
-        if None is not self._zyx_grid:
+        if None is self._zyx_grid:
             m, n, p = self.sdf.shape
-            x_i, y_i, z_i = np.arange(m), np.arange(n), np.arange(p)
-            xx, yy, zz = np.meshgrid(x_i, y_i, z_i, indexing='ij')
-            self._zyx_grid = np.stack((xx, yy, zz), axis=3)
+            z_i, y_i, x_i = np.arange(m), np.arange(n), np.arange(p)
+            zz, yy, xx = np.meshgrid(z_i, y_i, x_i, indexing='ij')
+            self._zyx_grid = np.stack((xx, yy, zz), axis=3).reshape((-1, 3))
         return self._zyx_grid
 
     @property
@@ -174,17 +174,34 @@ class SparseVolumeView(VolumeView):
         return DenseVolumeView(
             sdf=sdf_zyx,
             transform=self.transform.copy(),
-            known=self.known.copy(),
-            colors=self.colors_zyx)
+            known=None if None is self.known else self.known.copy(),
+            colors=colors_zyx)
 
     def to_sparse(self) -> VolumeView:
         return self
 
     @property
     def zyx_grid(self) -> np.ndarray:
-        if None is not self._zyx_grid:
+        if None is self._zyx_grid:
             self._zyx_grid = self.zyx_grid_
         return self._zyx_grid
+
+    @property
+    def sdf_zyx(self) -> np.ndarray:
+        return self.sdf
+
+    @property
+    def sdf_xyz(self) -> np.ndarray:
+        return self.sdf
+
+    @property
+    def colors_zyx(self) -> np.ndarray:
+        return self.colors
+
+    @property
+    def colors_xyz(self) -> np.ndarray:
+        return self.colors
+
 
     # def _get_voxels_points_mask(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     #     mask = np.abs(self.sparse_sdf) < self.plot_sdf_thr

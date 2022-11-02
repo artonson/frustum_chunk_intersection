@@ -3,7 +3,7 @@ from typing import List, Mapping
 
 import numpy as np
 
-from src.objects import VoxelChunkData, SceneVolume, CameraView, ChunkVolume
+import src.objects as o
 from src.geometry.volume_view import VolumeView
 
 
@@ -57,21 +57,21 @@ class DataPaths(ABC):
     def get_scene(self, scene_filename: str) -> VolumeView: ...
 
     @abstractmethod
-    def _load(self) -> VoxelChunkData: ...
+    def _load(self) -> o.VoxelChunkData: ...
 
     def load(self):
         self._data = self._load()
 
     @property
-    def scene_volume(self) -> SceneVolume:
+    def scene_volume(self) -> o.SceneVolume:
         return self._data.scene_volume
 
     @property
-    def camera_views(self) -> Mapping[str, CameraView]:
+    def camera_views(self) -> Mapping[str, o.CameraView]:
         return self._data.camera_views
 
     @property
-    def chunk_volumes(self) -> List[ChunkVolume]:
+    def chunk_volumes(self) -> List[o.ChunkVolume]:
         return self._data.chunk_volumes
 
     @property
