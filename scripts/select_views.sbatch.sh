@@ -52,6 +52,13 @@ source /rhome/aartemov/miniconda3/bin/activate /rhome/aartemov/miniconda3/envs/p
 REPO=/rhome/aartemov/repos/frustum_chunk_intersection
 SCRIPT="${REPO}/scripts/select_views.py"
 
+MATTERPORT_SDF_THR=0.5
+MATTERPORT_MAX_DISTANCE_THR=0.06
+
+SCANNET_SDF_THR=0.02
+SCANNET_MAX_DISTANCE_THR=0.01
+#  --association-file "${DATA_DIR}/association/${scene}_room${room}.txt" \
+
 $SCRIPT \
   $VERBOSE_ARG \
   --data-dir "${DATA_DIR}" \
@@ -60,8 +67,8 @@ $SCRIPT \
   --type "${type}" \
   --chunk "*" \
   --overlap 0.01 \
-  --sdf-thr 0.5 \
-  --max-distance-thr 0.06 \
-  --association-file "${DATA_DIR}/association/${scene}_room${room}.txt" \
-  --output-dir "${DATA_DIR}"/output2 \
+  --sdf-thr ${SCANNET_SDF_THR} \
+  --max-distance-thr ${SCANNET_MAX_DISTANCE_THR} \
+  --output-dir "${DATA_DIR}"/output_64 \
   --output-fraction
+
