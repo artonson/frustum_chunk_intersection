@@ -4,11 +4,11 @@
 #SBATCH --output=associate-views-logs/%A_%a.out
 #SBATCH --error=associate-views-logs/%A_%a.err
 #SBATCH --array=1-1
-#SBATCH --time=00:30:00
+#SBATCH --time=00:20:00
 #SBATCH --partition=submit
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=1
-#SBATCH --mem-per-cpu=4g
+#SBATCH --mem-per-cpu=64g
 #SBATCH --oversubscribe
 
 __usage="

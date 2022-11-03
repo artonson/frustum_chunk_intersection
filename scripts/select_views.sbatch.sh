@@ -1,14 +1,14 @@
 #!/bin/bash
 
 #SBATCH --job-name=select-views
-#SBATCH --output=%A_%a.out
-#SBATCH --error=%A_%a.err
+#SBATCH --output=select-views-logs/%A_%a.out
+#SBATCH --error=select-views-logs/%A_%a.err
 #SBATCH --array=1-1644
 #SBATCH --time=10:00:00
 #SBATCH --partition=submit
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=4
 #SBATCH --ntasks=1
-#SBATCH --mem-per-cpu=8g
+#SBATCH --mem-per-cpu=4g
 #SBATCH --oversubscribe
 
 __usage="
@@ -60,6 +60,8 @@ $SCRIPT \
   --type "${type}" \
   --chunk "*" \
   --overlap 0.01 \
-  --sdf-thr 0.01 \
-  --output-dir "${DATA_DIR}"/output \
+  --sdf-thr 0.5 \
+  --max-distance-thr 0.06 \
+  --association-file "${DATA_DIR}/association/${scene}_room${room}.txt" \
+  --output-dir "${DATA_DIR}"/output2 \
   --output-fraction
