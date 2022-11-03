@@ -12,10 +12,11 @@
 #SBATCH --oversubscribe
 
 __usage="
-Usage: $0 -d data_dir -o output_dir [-v] <INPUT_FILE
+Usage: $0 -d data_dir -o output_dir -y data_type [-v] <INPUT_FILE
 
   -d: 	input directory
   -o: 	output directory
+  -y:   data type [matterport3d or scannet]
   -v:   if set, verbose mode is activated (more output from the script generally)
 "
 
@@ -24,10 +25,12 @@ usage() { echo "$__usage" >&2; }
 # Get all the required options and set the necessary variables
 set -x
 VERBOSE=false
-while getopts "vd:i:o:" opt
+DATA_TYPE=matterport3d
+while getopts "vd:i:o:y:" opt
 do
     case ${opt} in
         d) DATA_DIR=$OPTARG;;
+        y) DATA_TYPE=$OPTARG;;
         i) INPUT_FILENAME=$OPTARG;;
         o) OUTPUT_DIR=$OPTARG;;
         v) VERBOSE=true;;
@@ -62,6 +65,7 @@ SCRIPT="${REPO}/scripts/associate_views_to_rooms.py"
 $SCRIPT \
   $VERBOSE_ARG \
   --data-dir "${DATA_DIR}" \
+  --data-type "${DATA_TYPE}" \
   --scene "${scene}" \
   --room "${room}" \
   --sdf-thr 1.0 \

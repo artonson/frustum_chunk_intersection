@@ -12,11 +12,12 @@
 #SBATCH --oversubscribe
 
 __usage="
-Usage: $0 -d data_dir -o output_dir -c chunk_subdir [-v] <INPUT_FILE
+Usage: $0 -d data_dir -o output_dir -c chunk_subdir -y data_type [-v] <INPUT_FILE
 
   -d: 	input directory
   -o: 	output directory
   -c:   sub-directory containing chunks (e.g. scannet_chunk_64 / scannet_chunk_128)
+  -y:   data type [matterport3d or scannet]
   -v:   if set, verbose mode is activated (more output from the script generally)
 "
 
@@ -26,10 +27,12 @@ usage() { echo "$__usage" >&2; }
 set -x
 VERBOSE=false
 CHUNK_SUBDIR=scannet_chunk_64
-while getopts "vd:i:o:c:" opt
+DATA_TYPE=matterport3d
+while getopts "vd:i:o:c:y:" opt
 do
     case ${opt} in
         d) DATA_DIR=$OPTARG;;
+        y) DATA_TYPE=$OPTARG;;
         i) INPUT_FILENAME=$OPTARG;;
         o) OUTPUT_DIR=$OPTARG;;
         c) CHUNK_SUBDIR=$OPTARG;;
@@ -72,6 +75,7 @@ SCANNET_MAX_DISTANCE_THR=0.01
 $SCRIPT \
   $VERBOSE_ARG \
   --data-dir "${DATA_DIR}" \
+  --data-type "${DATA_TYPE}" \
   --scene "${scene}" \
   --room "${room}" \
   --type "${type}" \
