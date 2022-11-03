@@ -28,6 +28,8 @@ def main(options):
         print('Loading data')
 
     dataset_class = DATASET_BY_TYPE[options.data_type]
+    if None is not options.chunk_subdir:
+        dataset_class.CHUNK_VOLUMES_DIR = options.chunk_subdir
     paths = dataset_class(
         data_root=options.data_dir,
         scene_id=options.scene_id,
@@ -110,6 +112,13 @@ def parse_args():
         choices=['inc', 'cmp'],
         default='cmp',
         help='name of the chunk to load [cmp, inc].')
+    parser.add_argument(
+        '-cs', '--chunk-subdir',
+        dest='chunk_subdir',
+        type=str,
+        required=False,
+        help='sub-directory containing chunks '
+             '(e.g. scannet_chunk_64 / scannet_chunk_128).')
 
     parser.add_argument(
         '-a', '--association-file',

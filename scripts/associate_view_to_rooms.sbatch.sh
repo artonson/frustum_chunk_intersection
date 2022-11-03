@@ -12,9 +12,10 @@
 #SBATCH --oversubscribe
 
 __usage="
-Usage: $0 -d data_dir [-v] <INPUT_FILE
+Usage: $0 -d data_dir -o output_dir [-v] <INPUT_FILE
 
   -d: 	input directory
+  -o: 	output directory
   -v:   if set, verbose mode is activated (more output from the script generally)
 "
 
@@ -23,11 +24,12 @@ usage() { echo "$__usage" >&2; }
 # Get all the required options and set the necessary variables
 set -x
 VERBOSE=false
-while getopts "vd:i:" opt
+while getopts "vd:i:o:" opt
 do
     case ${opt} in
         d) DATA_DIR=$OPTARG;;
         i) INPUT_FILENAME=$OPTARG;;
+        o) OUTPUT_DIR=$OPTARG;;
         v) VERBOSE=true;;
         *) usage; exit 1 ;;
     esac
@@ -37,6 +39,11 @@ if [[ "${VERBOSE}" = true ]]; then
     set -x
     VERBOSE_ARG="--verbose"
 fi
+
+if [[ ! ${OUTPUT_DIR} ]]; then
+    echo "output_dir is not set" && usage && exit 1
+fi
+mkdir -p "${OUTPUT_DIR}"
 
 count=0
 while IFS=' ' read -r scene room ; do
@@ -58,4 +65,4 @@ $SCRIPT \
   --scene "${scene}" \
   --room "${room}" \
   --sdf-thr 1.0 \
-  --output-dir "${DATA_DIR}"/association
+  --output-dir "${OUTPUT_DIR}"
