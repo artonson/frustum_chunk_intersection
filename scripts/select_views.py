@@ -8,17 +8,27 @@ __this_dir__ = os.path.dirname(os.path.realpath(__file__))
 __dir__ = os.path.normpath(os.path.join(__this_dir__, '..'))
 sys.path[1:1] = [__dir__]
 
+from src.datasets import DatasetType, DATASET_BY_TYPE, DATASET_TYPES
 from src.utils.argparse import PathType
-from src.datasets.matterport3d.data import Matterport3dDataPaths
 
 
 def main(options):
     if options.verbose:
+        print('Loading precomputed associations')
+    camera_ids_to_check = None
+    if None is not options.association_file:
+        with open(options.association_file, 'r') as association_file:
+            camera_ids_to_check = association_file.read().splitlines()
+    if camera_ids_to_check is not None and len(camera_ids_to_check) == 0:
+        if options.verbose:
+            print('No cameras to match; exiting.')
+        return
+
+    if options.verbose:
         print('Loading data')
 
-    Matterport3dDataPaths.CHUNK_VOLUMES_DIR = 'data-geo-color-128'
-
-    paths = Matterport3dDataPaths(
+    dataset_class = DATASET_BY_TYPE[options.data_type]
+    paths = dataset_class(
         data_root=options.data_dir,
         scene_id=options.scene_id,
         room_id=options.room_id,
@@ -33,13 +43,6 @@ def main(options):
         volume.plot_sdf_thr = options.sdf_thr
 
     if options.verbose:
-        print('Loading precomputed associations')
-    camera_ids_to_check = None
-    if None is not options.association_file:
-        with open(options.association_file, 'r') as association_file:
-            camera_ids_to_check = association_file.read().splitlines()
-
-    if options.verbose:
         print('Computing chunk-voxel visibility')
     if options.output_fraction:
         visibility_map = paths.compute_fraction_of_view_in_chunk(
@@ -51,21 +54,31 @@ def main(options):
     if options.verbose:
         print('Saving outputs')
     os.makedirs(options.output_dir, exist_ok=True)
-    for chunk_id, camera_ids in visibility_map.items():
+    for chunk_id, overlap_by_camera in visibility_map.items():
         output_filename = os.path.join(
             options.output_dir,
             f'{options.scene_id}_room{options.room_id}__{options.type_id}__{chunk_id}.txt')
         with open(output_filename, 'w') as f:
+            sorted_cameras = sorted(
+                overlap_by_camera.keys(), key=lambda id_: int(id_))
             if options.output_fraction:
                 f.write('\n'.join([
-                    f'{id} {value:.4f}' for id, value in camera_ids.items()]))
+                    f'{camera_id} {overlap_by_camera[camera_id]:.4f}'
+                    for camera_id in sorted_cameras]))
             else:
-                f.write('\n'.join([str(id) for id in camera_ids]))
+                f.write('\n'.join(sorted_cameras))
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument(
+        '-y', '--data-type',
+        dest='data_type',
+        choices=DATASET_TYPES,
+        default=DatasetType.MATTERPORT3D.value,
+        help='dataset structure to presuppose. ')
 
     parser.add_argument(
         '-d', '--data-dir',
@@ -94,8 +107,8 @@ def parse_args():
     parser.add_argument(
         '-tp', '--type',
         dest='type_id',
-        type=str,
-        required=True,
+        choices=['inc', 'cmp'],
+        default='cmp',
         help='name of the chunk to load [cmp, inc].')
 
     parser.add_argument(

@@ -1,17 +1,12 @@
 import glob
-import sys
 import os
-from typing import Mapping, List, Tuple
+from typing import List
 
-import imageio
 import numpy as np
-from tqdm import tqdm
 
 from src.datasets.large_scale_indoor import LargeScaleIndoorDataPaths
 from src.datasets.scannet.reader import load_scannet_chunk, load_scannet_sdf
-from src.objects import (
-    ChunkVolume, CameraView, VoxelChunkData, SceneVolume)
-from src.datasets.matterport3d.reader import load_sdf
+from src.objects import VoxelChunkData
 from src.geometry.volume_view import SparseVolumeView, VolumeView
 
 
@@ -33,8 +28,8 @@ class ScannetDataPaths(LargeScaleIndoorDataPaths):
     EXTRINSICS_DIR = 'pose'
     RGB_DIR = 'color'
     DEPTH_DIR = 'depth'
-    CHUNK_VOLUMES_DIR = 'scannet_chunk_128'
-    FULL_VOLUMES_DIR = 'scannet_sem3dlabel_nyu40'
+    CHUNK_VOLUMES_DIR = 'scannet_chunk_64'
+    SCENE_VOLUMES_DIR = 'scannet_sem3dlabel_nyu40'
 
     def __init__(
             self,
@@ -79,7 +74,7 @@ class ScannetDataPaths(LargeScaleIndoorDataPaths):
             self.data_root, self.IMAGES_DIR,
             f'{self.scene_id}_{self.room_id}',
             self.EXTRINSICS_DIR, f'{camera_id}.txt')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(calib_filename)
         return calib_filename
 
@@ -88,7 +83,7 @@ class ScannetDataPaths(LargeScaleIndoorDataPaths):
             self.data_root, self.IMAGES_DIR,
             f'{self.scene_id}_{self.room_id}',
             self.INTRINSICS_DIR, f'intrinsic_depth.txt')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(calib_filename)
         return calib_filename
 
@@ -97,7 +92,7 @@ class ScannetDataPaths(LargeScaleIndoorDataPaths):
             self.data_root, self.IMAGES_DIR,
             f'{self.scene_id}_{self.room_id}',
             self.RGB_DIR, f'{camera_id}.jpg')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(rgb_filename)
         return rgb_filename
 
@@ -106,7 +101,7 @@ class ScannetDataPaths(LargeScaleIndoorDataPaths):
             self.data_root, self.IMAGES_DIR,
             f'{self.scene_id}_{self.room_id}',
             self.DEPTH_DIR, f'{camera_id}.png')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(depth_filename)
         return depth_filename
 
@@ -114,7 +109,7 @@ class ScannetDataPaths(LargeScaleIndoorDataPaths):
         chunk_filename = f'{self.scene_id}_{self.room_id}__{self.type_id}__{chunk_id}.sdf'
         chunk_filename = os.path.join(
             self.data_root, self.CHUNK_VOLUMES_DIR, chunk_filename)
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(chunk_filename)
         return chunk_filename
 
@@ -130,9 +125,9 @@ class ScannetDataPaths(LargeScaleIndoorDataPaths):
         return volume
 
     def get_scene_filename(self, scene_id: str) -> str:
-        sdf_filename = os.path.join(self.data_root, self.FULL_VOLUMES_DIR,
+        sdf_filename = os.path.join(self.data_root, self.SCENE_VOLUMES_DIR,
             f'{self.scene_id}_{self.room_id}-sparse-sem-color.npy')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(sdf_filename)
         return sdf_filename
 

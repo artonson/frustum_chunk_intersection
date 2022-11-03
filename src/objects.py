@@ -127,6 +127,7 @@ class ChunkVolume(Plottable, PathsLoadable):
     plot_type: str = 'volume'  # or 'points' -- then u have color
     plot_sdf_thr: float = 0.5
     plot_colors: bool = True
+    point_size: float = 0.02
 
     @classmethod
     def from_paths(cls, paths: 'DataPaths', *args, **kwargs):
@@ -150,12 +151,8 @@ class ChunkVolume(Plottable, PathsLoadable):
         elif self.plot_type == 'points':
             # volume = self.volume.to_dense()
             mask = (np.abs(self.volume.sdf_xyz) < self.plot_sdf_thr).ravel()
-            print(mask.shape)
             points = self.volume.xyz_world[mask]
-            print(points.shape)
-            transform = self.volume.grid_to_world
-            voxel_size_in_mm = float(transform[0, 0])
-            args = dict(points=points, point_size=voxel_size_in_mm)
+            args = dict(points=points, point_size=self.point_size)
             if self.plot_colors:
                 if None is not self.volume.colors:
                     c = self.volume.colors_xyz[mask]

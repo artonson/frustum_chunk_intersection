@@ -65,7 +65,7 @@ class Matterport3dDataPaths(LargeScaleIndoorDataPaths):
         df_filename = os.path.join(
             self.data_root, self.DATA_FRAMES_DIR,
             f'{self.scene_id}_room{self.room_id}__{self.type_id}__{chunk_id}.txt')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(df_filename)
         return df_filename
 
@@ -73,7 +73,7 @@ class Matterport3dDataPaths(LargeScaleIndoorDataPaths):
         chunk_filename = f'{self.scene_id}_room{self.room_id}__{self.type_id}__{chunk_id}.sdf'
         chunk_filename = os.path.join(
             self.data_root, self.CHUNK_VOLUMES_DIR, chunk_filename)
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(chunk_filename)
         return chunk_filename
 
@@ -84,7 +84,7 @@ class Matterport3dDataPaths(LargeScaleIndoorDataPaths):
         rgb_filename = os.path.join(
             self.data_root, self.SCENE_VOLUMES_DIR,
             f'{self.scene_id}_room{self.room_id}__{0}__.colors')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(sdf_filename) ; print((rgb_filename))
         return sdf_filename, rgb_filename
 

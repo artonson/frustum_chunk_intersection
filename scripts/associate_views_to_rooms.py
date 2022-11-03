@@ -10,18 +10,20 @@ __this_dir__ = os.path.dirname(os.path.realpath(__file__))
 __dir__ = os.path.normpath(os.path.join(__this_dir__, '..'))
 sys.path[1:1] = [__dir__]
 
+from src.datasets import DatasetType, DATASET_BY_TYPE, DATASET_TYPES
 from src.utils.argparse import PathType
-from src.datasets.matterport3d.data import Matterport3dDataPaths
 
 
 def main(options):
     if options.verbose:
         print('Loading data')
 
-    Matterport3dDataPaths.CHUNK_VOLUMES_DIR = 'none'  # don't load chunks
-    Matterport3dDataPaths.RGB_DIR = 'none'  # don't load RGB
-    Matterport3dDataPaths.DEPTH_DIR = 'none'  # don't load depth
-    paths = Matterport3dDataPaths(
+    dataset_class = DATASET_BY_TYPE[options.data_type]
+
+    dataset_class.CHUNK_VOLUMES_DIR = 'none'  # don't load chunks
+    dataset_class.RGB_DIR = 'none'  # don't load RGB
+    dataset_class.DEPTH_DIR = 'none'  # don't load depth
+    paths = dataset_class(
         data_root=options.data_dir,
         scene_id=options.scene_id,
         room_id=options.room_id,
@@ -52,12 +54,21 @@ def main(options):
         options.output_dir,
         f'{options.scene_id}_room{options.room_id}.txt')
     with open(output_filename, 'w') as f:
-        f.write('\n'.join(sorted(camera_views_in_room)))
+        camera_views_in_room = sorted(
+            camera_views_in_room, key=lambda id_: int(id_))
+        f.write('\n'.join(camera_views_in_room))
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument(
+        '-y', '--data-type',
+        dest='data_type',
+        choices=DATASET_TYPES,
+        default=DatasetType.MATTERPORT3D.value,
+        help='dataset structure to presuppose. ')
 
     parser.add_argument(
         '-d', '--data-dir',

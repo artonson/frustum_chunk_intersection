@@ -12,7 +12,7 @@ from tqdm import tqdm
 from src.datasets.base import DataPaths
 from src.datasets.view_chunk_matching import (
     compute_fraction_of_view_in_chunk,
-    is_visible)
+    is_visible, ChunkAssociation)
 from src.objects import (
     ChunkVolume, CameraView, VoxelChunkData, SceneVolume)
 
@@ -44,6 +44,7 @@ class LargeScaleIndoorDataPaths(DataPaths, ABC):
             verbose: bool = False,
     ):
         super().__init__(verbose)
+        self.print_filenames = True
 
         self.data_root = data_root
         self.scene_id = scene_id
@@ -60,7 +61,7 @@ class LargeScaleIndoorDataPaths(DataPaths, ABC):
         calib_filename = os.path.join(
             self.data_root, self.IMAGES_DIR, self.scene_id,
             self.EXTRINSICS_DIR, f'{camera_id}.txt')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(calib_filename)
         return calib_filename
 
@@ -68,7 +69,7 @@ class LargeScaleIndoorDataPaths(DataPaths, ABC):
         calib_filename = os.path.join(
             self.data_root, self.IMAGES_DIR, self.scene_id,
             self.INTRINSICS_DIR, f'{camera_id}.txt')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(calib_filename)
         return calib_filename
 
@@ -76,7 +77,7 @@ class LargeScaleIndoorDataPaths(DataPaths, ABC):
         rgb_filename = os.path.join(
             self.data_root, self.IMAGES_DIR, self.scene_id,
             self.RGB_DIR, f'{camera_id}.jpg')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(rgb_filename)
         return rgb_filename
 
@@ -84,7 +85,7 @@ class LargeScaleIndoorDataPaths(DataPaths, ABC):
         depth_filename = os.path.join(
             self.data_root, self.IMAGES_DIR, self.scene_id,
             self.DEPTH_DIR, f'{camera_id}.png')
-        if self.verbose:
+        if self.verbose and self.print_filenames:
             print(depth_filename)
         return depth_filename
 
@@ -175,9 +176,12 @@ class LargeScaleIndoorDataPaths(DataPaths, ABC):
             self,
             camera_ids_to_check=None,
             max_distance_thr: float = 0.02,
+            min_depth: float = 1e-2,
+            max_depth: float = 6.0,
     ) -> Mapping[int, Mapping[int, float]]:
         visibility = defaultdict(lambda: defaultdict(float))
         for chunk_volume in self._data.chunk_volumes:
+            matcher = ChunkAssociation(chunk_volume)
             if None is camera_ids_to_check:
                 camera_ids_to_check = self.camera_views.keys()
             camera_ids_to_check = set(camera_ids_to_check)
@@ -186,8 +190,13 @@ class LargeScaleIndoorDataPaths(DataPaths, ABC):
             if self.verbose:
                 iterable = tqdm(iterable)
             for camera_view in iterable:
-                fraction = compute_fraction_of_view_in_chunk(
-                    chunk_volume, camera_view,
-                    max_distance_thr=max_distance_thr)
+                # fraction = compute_fraction_of_view_in_chunk(
+                #     chunk_volume, camera_view,
+                #     max_distance_thr=max_distance_thr)
+                fraction = matcher.compute_overlap(
+                    camera_view,
+                    max_distance_thr=max_distance_thr,
+                    min_depth=min_depth,
+                    max_depth=max_depth)
                 visibility[chunk_volume.id][camera_view.id] = fraction
         return visibility
